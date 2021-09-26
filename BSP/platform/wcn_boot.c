@@ -335,7 +335,7 @@ static struct regmap *reg_map;
 #define AFC_CALI_READ_FINISH 0x12121212
 #define WCN_AFC_CALI_PATH "/productinfo/wcn/tsx_bt_data.txt"
 
-#define BIT(nr) (1UL << (nr))
+//#define BIT(nr) (1UL << (nr))
 
 #ifdef CONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
 #define POWER_WQ_DELAYED_MS 0
@@ -1284,8 +1284,10 @@ static void marlin_release_firmware(struct marlin_firmware *mfirmware)
 		if (mfirmware->is_from_fs)
 			release_firmware(mfirmware->priv);
 		else {
+#ifndef CONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
 			if(mfirmware->data)
 				vfree(mfirmware->data);
+#endif
 		}
 		kfree(mfirmware);
 	}
@@ -1970,7 +1972,8 @@ static void marlin_send_sdio_config_to_cp_vendor(void)
 	union wcn_sdiohal_config sdio_cfg = {0};
 
 #if (defined(CONFIG_HISI_BOARD) || defined(CONFIG_AML_BOARD) ||\
-	defined(CONFIG_RK_BOARD) || defined(CONFIG_AW_BOARD))
+	defined(CONFIG_RK_BOARD) || defined(CONFIG_AW_BOARD) ||\
+	defined(CONFIG_MTK_BOARD) )
 	/* Vendor config */
 
 	/* bit[0]: sdio_config_en:
@@ -2025,21 +2028,13 @@ static void marlin_send_sdio_config_to_cp_vendor(void)
 	if (marlin_get_bt_wl_wake_host_en() & BIT(BT_WAKE_HOST)) {
 		sdio_cfg.cfg.bt_wake_host_en = 1;
 		WCN_DEBUG("sdio_config bt_wake_host:[en]\n");
-#if defined(CONFIG_HISI_BOARD)
+#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_AML_BOARD)
 		/*
 		 * Hisi only support wakeup by:
 		 * high level - low level for 200ms -high level
 		 */
 		sdio_cfg.cfg.bt_wake_host_trigger_type = 0;
 		WCN_INFO("sdio_config bt_wake_host trigger:[low]\n");
-#elif defined(CONFIG_AML_BOARD)
-		if (wifi_irq_trigger_level() == GPIO_IRQ_LOW) {
-			sdio_cfg.cfg.bt_wake_host_trigger_type = 0;
-			WCN_INFO("sdio_config bt_wake_host trigger:[low]\n");
-		} else {
-			sdio_cfg.cfg.bt_wake_host_trigger_type = 3;
-			WCN_INFO("sdio_config bt_wake_host trigger:[high]\n");
-		}
 #else
 		sdio_cfg.cfg.bt_wake_host_trigger_type = 3;
 		WCN_INFO("sdio_config bt_wake_host trigger:[high]\n");

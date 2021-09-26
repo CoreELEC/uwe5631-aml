@@ -26,6 +26,7 @@
 #include <net/ip6_checksum.h>
 #include "debug.h"
 #include "tcp_ack.h"
+#include <linux/kthread.h>
 
 #ifdef RX_HW_CSUM
 bool mh_ipv6_ext_hdr(unsigned char nexthdr)
@@ -137,7 +138,18 @@ void sprdwl_rx_send_cmd(struct sprdwl_intf *intf, void *data, int len,
 
 	sprdwl_rx_send_cmd_process(priv, data, len, id, ctx_id);
 }
+#ifdef SPRD_RX_THREAD
+/* seam for rx_thread */
+void rx_down(struct sprdwl_rx_if *rx_if)
+{
+	wait_for_completion_interruptible(&rx_if->rx_completed);
+}
 
+void rx_up(struct sprdwl_rx_if *rx_if)
+{
+	complete(&rx_if->rx_completed);
+}
+#endif
 void sprdwl_rx_process(struct sprdwl_rx_if *rx_if, struct sk_buff *pskb)
 {
 #ifndef SPLIT_STACK
@@ -207,8 +219,11 @@ void sprdwl_rx_net_work_queue(struct work_struct *work)
 	}
 }
 #endif
-
+#ifdef SPRD_RX_THREAD
+static int sprdwl_rx_work_queue(void *arg)
+#else
 static void sprdwl_rx_work_queue(struct work_struct *work)
+#endif
 {
 	struct sprdwl_msg_buf *msg;
 	struct sprdwl_priv *priv;
@@ -218,161 +233,175 @@ static void sprdwl_rx_work_queue(struct work_struct *work)
 	int len = 0, num = 0;
 	/*struct sprdwl_vif *vif;
 	struct sprdwl_cmd_hdr *hdr;*/
-
+#ifdef SPRD_RX_THREAD
+	rx_if = (struct sprdwl_rx_if *)arg;
+#else
 	rx_if = container_of(work, struct sprdwl_rx_if, rx_work);
+#endif
 	intf = rx_if->intf;
 	priv = intf->priv;
 
+#ifdef SPRD_RX_THREAD
+	set_user_nice(current, -20);
+	while(1) {
+		rx_down(rx_if);
+		if(intf->exit || kthread_should_stop())
+			return 0;
+#endif
 #ifndef RX_NAPI
-	if (!intf->exit && !sprdwl_peek_msg_buf(&rx_if->rx_list))
-		sprdwl_rx_process(rx_if, NULL);
+  	if (!intf->exit && !sprdwl_peek_msg_buf(&rx_if->rx_list))
+  		sprdwl_rx_process(rx_if, NULL);
 #endif
 
-	while ((msg = sprdwl_peek_msg_buf(&rx_if->rx_list))) {
-		if (intf->exit)
-			goto next;
+  	while ((msg = sprdwl_peek_msg_buf(&rx_if->rx_list))) {
+  		if (intf->exit)
+  			goto next;
 
-		pos = msg->tran_data;
-		for (num = msg->len; num > 0; num--) {
-			pos = sprdwl_get_rx_data(intf, pos, &data, &tran_data,
-						 &len, intf->hif_offset);
+  		pos = msg->tran_data;
+  		for (num = msg->len; num > 0; num--) {
+  			pos = sprdwl_get_rx_data(intf, pos, &data, &tran_data,
+  						 &len, intf->hif_offset);
 
-			wl_debug("%s: rx type:%d, num = %d\n",
-				__func__, SPRDWL_HEAD_GET_TYPE(data), num);
+  			wl_debug("%s: rx type:%d, num = %d\n",
+  				__func__, SPRDWL_HEAD_GET_TYPE(data), num);
 
-			/* len in mbuf_t just means buffer len in ADMA,
-			 * so need to get data len in sdiohal_puh
-			 */
-			if (sprdwl_debug_level >= L_DBG) {
-				int print_len =
-					((struct sdiohal_puh *)tran_data)->len;
+  			/* len in mbuf_t just means buffer len in ADMA,
+  			 * so need to get data len in sdiohal_puh
+  			 */
+  			if (sprdwl_debug_level >= L_DBG) {
+  				int print_len =
+  					((struct sdiohal_puh *)tran_data)->len;
 
-				if (print_len > 100)
-					print_len = 100;
-				sprdwl_hex_dump("rx data",
-						(unsigned char *)data,
-						print_len);
-			}
-#if 0
-			/* to check is the rsp_cnt from CP2
-			* eqaul to rsp_cnt count on driver side.
-			* if not equal, must be lost on SDIOHAL/PCIE.
-			* assert to warn CP2
-			*/
-			hdr = (struct sprdwl_cmd_hdr *)data;
-			vif = ctx_id_to_vif(priv, hdr->common.ctx_id);
-			if ((SPRDWL_HEAD_GET_TYPE(data) == SPRDWL_TYPE_CMD ||
-				SPRDWL_HEAD_GET_TYPE(data) == SPRDWL_TYPE_EVENT)) {
-				if (rx_if->rsp_event_cnt != hdr->rsp_cnt) {
-					wl_info("%s, %d, rsp_event_cnt=%d, hdr->cnt=%d\n",
-						__func__, __LINE__,
-						rx_if->rsp_event_cnt, hdr->rsp_cnt);
+  				if (print_len > 100)
+  					print_len = 100;
+  				sprdwl_hex_dump("rx data",
+  						(unsigned char *)data,
+  						print_len);
+  			}
+  #if 0
+  			/* to check is the rsp_cnt from CP2
+  			* eqaul to rsp_cnt count on driver side.
+  			* if not equal, must be lost on SDIOHAL/PCIE.
+  			* assert to warn CP2
+  			*/
+  			hdr = (struct sprdwl_cmd_hdr *)data;
+  			vif = ctx_id_to_vif(priv, hdr->common.ctx_id);
+  			if ((SPRDWL_HEAD_GET_TYPE(data) == SPRDWL_TYPE_CMD ||
+  				SPRDWL_HEAD_GET_TYPE(data) == SPRDWL_TYPE_EVENT)) {
+  				if (rx_if->rsp_event_cnt != hdr->rsp_cnt) {
+  					wl_info("%s, %d, rsp_event_cnt=%d, hdr->cnt=%d\n",
+  						__func__, __LINE__,
+  						rx_if->rsp_event_cnt, hdr->rsp_cnt);
 
-					if (hdr->rsp_cnt == 0) {
-						rx_if->rsp_event_cnt = 0;
-						wl_info("%s reset rsp_event_cnt", __func__);
-					}
-					/* hdr->rsp_cnt=0 means it's a old version CP2,
-					* so do not assert.
-					* vif=NULL means driver not init ok,
-					* send cmd may cause crash
-					*/
-					if (vif != NULL && hdr->rsp_cnt != 0) {
-						wl_err("cmd_id:%d resp count = %d error\n",
-								hdr->cmd_id, hdr->rsp_cnt);
-						sprdwl_send_assert_cmd(vif, hdr->cmd_id, RSP_CNT_ERROR);
-					}
-				}
+  					if (hdr->rsp_cnt == 0) {
+  						rx_if->rsp_event_cnt = 0;
+  						wl_info("%s reset rsp_event_cnt", __func__);
+  					}
+  					/* hdr->rsp_cnt=0 means it's a old version CP2,
+  					* so do not assert.
+  					* vif=NULL means driver not init ok,
+  					* send cmd may cause crash
+  					*/
+  					if (vif != NULL && hdr->rsp_cnt != 0) {
+  						wl_err("cmd_id:%d resp count = %d error\n",
+  								hdr->cmd_id, hdr->rsp_cnt);
+  						sprdwl_send_assert_cmd(vif, hdr->cmd_id, RSP_CNT_ERROR);
+  					}
+  				}
 
-				rx_if->rsp_event_cnt++;
-			}
-			sprdwl_put_vif(vif);
-#endif
-			if (unlikely(priv->wakeup_tracer.resume_flag))
-				trace_rx_wakeup(&priv->wakeup_tracer, data,
-						tran_data + intf->hif_offset);
+  				rx_if->rsp_event_cnt++;
+  			}
+  			sprdwl_put_vif(vif);
+  #endif
+  			if (unlikely(priv->wakeup_tracer.resume_flag))
+  				trace_rx_wakeup(&priv->wakeup_tracer, data,
+  						tran_data + intf->hif_offset);
 
-			switch (SPRDWL_HEAD_GET_TYPE(data)) {
-			case SPRDWL_TYPE_DATA:
-#if defined FPGA_LOOPBACK_TEST
-				if (intf->loopback_n < 500) {
-					unsigned char *r_buf;
+  			switch (SPRDWL_HEAD_GET_TYPE(data)) {
+  			case SPRDWL_TYPE_DATA:
+  #if defined FPGA_LOOPBACK_TEST
+  				if (intf->loopback_n < 500) {
+  					unsigned char *r_buf;
 
-					r_buf = (unsigned char *)data;
-					sprdwl_intf_tx_data_fpga_test(intf,
-								      r_buf,
-								      len);
-				}
-#else
-				if (msg->len > SPRDWL_MAX_DATA_RXLEN)
-					wl_err("err rx data too long:%d > %d\n",
-					       len, SPRDWL_MAX_DATA_RXLEN);
-				sprdwl_rx_data_process(priv, data);
-#endif /* FPGA_LOOPBACK_TEST */
-				break;
-			case SPRDWL_TYPE_CMD:
-				if (msg->len > SPRDWL_MAX_CMD_RXLEN)
-					wl_err("err rx cmd too long:%d > %d\n",
-					       len, SPRDWL_MAX_CMD_RXLEN);
-				sprdwl_rx_rsp_process(priv, data);
-				break;
-			case SPRDWL_TYPE_PKT_LOG:
-				if (sprdwl_pkt_log_save(intf, data) == 1)
-					wl_err("%s: pkt log file open or create	failed!\n",
-							__func__);
-				break;
-			case SPRDWL_TYPE_EVENT:
-				if (msg->len > SPRDWL_MAX_CMD_RXLEN)
-					wl_err("err rx event too long:%d > %d\n",
-					       len, SPRDWL_MAX_CMD_RXLEN);
-				sprdwl_rx_event_process(priv, data);
-				break;
-			case SPRDWL_TYPE_DATA_SPECIAL:
-				debug_ts_leave(RX_SDIO_PORT);
-				debug_ts_enter(RX_SDIO_PORT);
+  					r_buf = (unsigned char *)data;
+  					sprdwl_intf_tx_data_fpga_test(intf,
+  								      r_buf,
+  								      len);
+  				}
+  #else
+  				if (msg->len > SPRDWL_MAX_DATA_RXLEN)
+  					wl_err("err rx data too long:%d > %d\n",
+  					       len, SPRDWL_MAX_DATA_RXLEN);
+  				sprdwl_rx_data_process(priv, data);
+  #endif /* FPGA_LOOPBACK_TEST */
+  				break;
+  			case SPRDWL_TYPE_CMD:
+  				if (msg->len > SPRDWL_MAX_CMD_RXLEN)
+  					wl_err("err rx cmd too long:%d > %d\n",
+  					       len, SPRDWL_MAX_CMD_RXLEN);
+  				sprdwl_rx_rsp_process(priv, data);
+  				break;
+  			case SPRDWL_TYPE_PKT_LOG:
+  				if (sprdwl_pkt_log_save(intf, data) == 1)
+  					wl_err("%s: pkt log file open or create	failed!\n",
+  							__func__);
+  				break;
+  			case SPRDWL_TYPE_EVENT:
+  				if (msg->len > SPRDWL_MAX_CMD_RXLEN)
+  					wl_err("err rx event too long:%d > %d\n",
+  					       len, SPRDWL_MAX_CMD_RXLEN);
+  				sprdwl_rx_event_process(priv, data);
+  				break;
+  			case SPRDWL_TYPE_DATA_SPECIAL:
+  				debug_ts_leave(RX_SDIO_PORT);
+  				debug_ts_enter(RX_SDIO_PORT);
 
-				if (msg->len > SPRDWL_MAX_DATA_RXLEN)
-					wl_err("err data trans too long:%d > %d\n",
-					       len, SPRDWL_MAX_CMD_RXLEN);
-				sprdwl_rx_mh_data_process(rx_if, tran_data, len,
-							  msg->buffer_type);
-				tran_data = NULL;
-				data = NULL;
-				break;
-			case SPRDWL_TYPE_DATA_PCIE_ADDR:
-				if (intf->priv->hw_type != SPRDWL_HW_PCIE) {
-					wl_err("error get pcie addr data!\n");
-					break;
-				}
-				if (msg->len > SPRDWL_MAX_CMD_RXLEN)
-					wl_err("err rx mh data too long:%d > %d\n",
-					       len, SPRDWL_MAX_DATA_RXLEN);
-				sprdwl_rx_mh_addr_process(rx_if, tran_data, len,
-							  msg->buffer_type);
-				tran_data = NULL;
-				data = NULL;
-				break;
-			default:
-				wl_err("rx unknown type:%d\n",
-				       SPRDWL_HEAD_GET_TYPE(data));
-				break;
-			}
+  				if (msg->len > SPRDWL_MAX_DATA_RXLEN)
+  					wl_err("err data trans too long:%d > %d\n",
+  					       len, SPRDWL_MAX_CMD_RXLEN);
+  				sprdwl_rx_mh_data_process(rx_if, tran_data, len,
+  							  msg->buffer_type);
+  				tran_data = NULL;
+  				data = NULL;
+  				break;
+  			case SPRDWL_TYPE_DATA_PCIE_ADDR:
+  				if (intf->priv->hw_type != SPRDWL_HW_PCIE) {
+  					wl_err("error get pcie addr data!\n");
+  					break;
+  				}
+  				if (msg->len > SPRDWL_MAX_CMD_RXLEN)
+  					wl_err("err rx mh data too long:%d > %d\n",
+  					       len, SPRDWL_MAX_DATA_RXLEN);
+  				sprdwl_rx_mh_addr_process(rx_if, tran_data, len,
+  							  msg->buffer_type);
+  				tran_data = NULL;
+  				data = NULL;
+  				break;
+  			default:
+  				wl_err("rx unknown type:%d\n",
+  				       SPRDWL_HEAD_GET_TYPE(data));
+  				break;
+  			}
 
-			/* Marlin3 should release buffer by ourself */
-			if (tran_data)
-				sprdwl_free_data(tran_data, msg->buffer_type);
+  			/* Marlin3 should release buffer by ourself */
+  			if (tran_data)
+  				sprdwl_free_data(tran_data, msg->buffer_type);
 
-			if (!pos) {
-				wl_debug("%s no mbuf\n", __func__);
-				break;
-			}
-		}
-next:
-		/* TODO: Should we free mbuf one by one? */
-		sprdwl_free_rx_data(intf, msg->fifo_id, msg->tran_data,
-				    msg->data, msg->len);
-		sprdwl_dequeue_msg_buf(msg, &rx_if->rx_list);
+  			if (!pos) {
+  				wl_debug("%s no mbuf\n", __func__);
+  				break;
+  			}
+  		}
+  next:
+  		/* TODO: Should we free mbuf one by one? */
+  		sprdwl_free_rx_data(intf, msg->fifo_id, msg->tran_data,
+  				    msg->data, msg->len);
+  		sprdwl_dequeue_msg_buf(msg, &rx_if->rx_list);
+  	}
+#ifdef SPRD_RX_THREAD
 	}
+	return 0;
+#endif
 }
 
 /*
@@ -388,7 +417,7 @@ int sprdwl_pkt_log_save(struct sprdwl_intf *intf, void *data)
 	/*for pkt log space key and enter key*/
 	char temp_space, temp_enter;
 	/*for pkt log txt line number and write pkt log into file*/
-	char temphdr[6], tempdata[4];
+	char temphdr[6], tempdata[3];
 
 	intf->pfile = filp_open(
 					"storage/sdcard0/Download/sprdwl_pkt_log.txt",
@@ -554,6 +583,8 @@ void sprdwl_rx_napi_init(struct net_device *ndev, struct sprdwl_intf *intf)
 }
 #endif
 
+#define RX_THREAD_NAME	"SPRD_RX_THREAD"
+
 int sprdwl_rx_init(struct sprdwl_intf *intf)
 {
 	int ret = 0;
@@ -582,6 +613,16 @@ int sprdwl_rx_init(struct sprdwl_intf *intf)
 	}
 #endif
 
+#ifdef SPRD_RX_THREAD
+  /* init rx_work thread */
+	rx_if->rx_thread =
+		kthread_create(sprdwl_rx_work_queue, (void*)rx_if, RX_THREAD_NAME);
+	if (IS_ERR_OR_NULL(rx_if->rx_thread)) {
+		wl_err("%s SPRDWL_RX_THREAD create failed\n", __func__);
+		ret = -ENOMEM;
+		goto err_rx_work;
+	}
+#else
 	/* init rx_work */
 	rx_if->rx_queue =
 		alloc_ordered_workqueue("SPRDWL_RX_QUEUE", WQ_MEM_RECLAIM |
@@ -594,7 +635,7 @@ int sprdwl_rx_init(struct sprdwl_intf *intf)
 
 	/*init rx_queue*/
 	INIT_WORK(&rx_if->rx_work, sprdwl_rx_work_queue);
-
+#endif
 #ifdef SPLIT_STACK
 	rx_if->rx_net_workq = alloc_ordered_workqueue("SPRDWL_RX_NET_QUEUE",
 					WQ_HIGHPRI | WQ_CPU_INTENSIVE |
@@ -627,6 +668,11 @@ int sprdwl_rx_init(struct sprdwl_intf *intf)
 	intf->sprdwl_rx = (void *)rx_if;
 	rx_if->intf = intf;
 
+#ifdef SPRD_RX_THREAD
+	init_completion(&rx_if->rx_completed);
+	wake_up_process(rx_if->rx_thread);
+#endif
+
 	return ret;
 
 err_rx_mm:
@@ -636,7 +682,12 @@ err_rx_defrag:
 	destroy_workqueue(rx_if->rx_net_workq);
 err_rx_net_work:
 #endif
+#ifndef SPRD_RX_THREAD
 	destroy_workqueue(rx_if->rx_queue);
+#else
+	kthread_stop(rx_if->rx_thread);
+	rx_if->rx_thread = NULL;
+#endif
 err_rx_work:
 #ifdef RX_NAPI
 	sprdwl_msg_deinit(&rx_if->rx_data_list);
@@ -653,8 +704,21 @@ int sprdwl_rx_deinit(struct sprdwl_intf *intf)
 {
 	struct sprdwl_rx_if *rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
 
+#ifdef SPRD_RX_THREAD
+	if (rx_if->rx_thread) {
+		rx_up(rx_if);
+		if (!strncmp(rx_if->rx_thread->comm, RX_THREAD_NAME,
+				strlen(RX_THREAD_NAME))) {
+			kthread_stop(rx_if->rx_thread);
+			rx_if->rx_thread = NULL;
+		} else {
+			wl_err("rx thread name is : %s\n", rx_if->rx_thread->comm);
+		}
+	}
+#else
 	flush_workqueue(rx_if->rx_queue);
 	destroy_workqueue(rx_if->rx_queue);
+#endif
 
 #ifdef SPLIT_STACK
 	flush_workqueue(rx_if->rx_net_workq);

@@ -44,7 +44,7 @@
 extern int wifi_irq_num(void);
 extern int wifi_irq_trigger_level(void);
 extern void sdio_reinit(void);
-extern void sdio_set_max_reqsz(unsigned int size);
+extern void sdio_set_max_regs(unsigned int size);
 #endif
 
 #ifdef CONFIG_RK_BOARD
@@ -71,6 +71,8 @@ extern int sunxi_wlan_get_oob_irq_flags(void);
 #ifndef IS_BYPASS_WAKE
 #define IS_BYPASS_WAKE(addr) (false)
 #endif
+
+extern void mmc_power_up(struct mmc_host *host, u32 ocr);
 
 static int (*scan_card_notify)(void);
 struct sdiohal_data_t *sdiohal_data;
@@ -1482,6 +1484,69 @@ static void sdiohal_irq_handler_data(struct sdio_func *func)
 	sdiohal_rx_up();
 }
 
+static void sdiohal_shutdown(struct device *dev)
+{
+	struct sdiohal_data_t *p_data = sdiohal_get_data();
+	struct mchn_ops_t *sdiohal_ops;
+	struct sdio_func *func;
+	int chn;
+
+	sdiohal_info("[%s]enter\n", __func__);
+
+	atomic_set(&p_data->flag_suspending, 1);
+	for (chn = 0; chn < SDIO_CHANNEL_NUM; chn++) {
+		sdiohal_ops = chn_ops(chn);
+		if (sdiohal_ops && sdiohal_ops->power_notify) {
+#ifdef CONFIG_WCN_SLP
+			sdio_record_power_notify(true);
+#endif
+			if (sdiohal_ops->power_notify(chn, false)) {
+				sdiohal_info("[%s] chn:%d power notify fail\n",
+						__func__, chn);
+				atomic_set(&p_data->flag_suspending, 0);
+				goto finish;
+			}
+		}
+	}
+
+#ifdef CONFIG_WCN_SLP
+	sdio_wait_pub_int_done();
+	sdio_record_power_notify(false);
+#endif
+
+	if (marlin_get_bt_wl_wake_host_en()) {
+		/* Inform CP side that AP will enter into suspend status. */
+		sprdwcn_bus_aon_writeb(REG_AP_INT_CP0, (1 << AP_SUSPEND));
+	}
+
+	atomic_set(&p_data->flag_suspending, 0);
+	atomic_set(&p_data->flag_resume, 0);
+	if (atomic_read(&p_data->irq_cnt))
+		sdiohal_lock_rx_ws();
+
+	if (WCN_CARD_EXIST(&p_data->xmit_cnt)) {
+		func = container_of(dev, struct sdio_func, dev);
+		func->card->host->pm_flags |= MMC_PM_KEEP_POWER;
+		sdiohal_info("%s pm_flags=0x%x, caps=0x%x\n", __func__,
+			     func->card->host->pm_flags,
+			     func->card->host->caps);
+	}
+
+	if (p_data->irq_type == SDIOHAL_RX_INBAND_IRQ) {
+		sdio_claim_host(p_data->sdio_func[FUNC_1]);
+		sdio_release_irq(p_data->sdio_func[FUNC_1]);
+		sdio_release_host(p_data->sdio_func[FUNC_1]);
+	} else if ((p_data->irq_type == SDIOHAL_RX_EXTERNAL_IRQ) &&
+		(p_data->irq_num > 0))
+		disable_irq(p_data->irq_num);
+
+	if (WCN_CARD_EXIST(&p_data->xmit_cnt))
+		atomic_add(SDIOHAL_REMOVE_CARD_VAL, &p_data->xmit_cnt);
+
+finish:
+	return;
+}
+
 static int sdiohal_suspend(struct device *dev)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
@@ -1516,6 +1581,7 @@ static int sdiohal_suspend(struct device *dev)
 	}
 
 #ifdef CONFIG_WCN_SLP
+	slp_mgr_drv_sleep(SUBSYS_MAX, true);
 	sdio_wait_pub_int_done();
 	sdio_record_power_notify(false);
 #endif
@@ -1571,9 +1637,17 @@ static int sdiohal_resume(struct device *dev)
 	 * For hisi board, sdio host will power down.
 	 * So sdio slave need to reset and reinit.
 	 */
+#if KERNEL_VERSION(4, 18, 20) >= LINUX_VERSION_CODE
 	mmc_power_save_host(p_data->sdio_dev_host);
+#else
+	mmc_power_off(p_data->sdio_dev_host, p_data->sdio_dev_host->card->ocr);
+#endif
 	mdelay(5);
+#if KERNEL_VERSION(4, 18, 20) >= LINUX_VERSION_CODE
 	mmc_power_restore_host(p_data->sdio_dev_host);
+#else
+	mmc_power_up(p_data->sdio_dev_host, p_data->sdio_dev_host->card->ocr);
+#endif
 
 	if (!p_data->pwrseq) {
 		/* Enable Function 1 */
@@ -1669,6 +1743,8 @@ static int sdiohal_resume(struct device *dev)
 		(p_data->irq_num > 0))
 		enable_irq(p_data->irq_num);
 #endif
+
+	slp_mgr_wakeup(SUBSYS_MAX);
 
 	for (chn = 0; chn < SDIO_CHANNEL_NUM; chn++) {
 		sdiohal_ops = chn_ops(chn);
@@ -1883,16 +1959,19 @@ static int sdiohal_probe(struct sdio_func *func,
 	struct mmc_host *host = func->card->host;
 
 	sdiohal_info("%s: func->class=%x, vendor=0x%04x, device=0x%04x, "
-		     "func_num=0x%04x, clock=%d\n",
+		     "func_num=0x%04x, clock=%d, SDIOHAL_RX_RECVBUF_LEN:%d,"
+		     "SDIOHAL_32_BIT_RX_RECVBUF_LEN:%d.\n",
 		     __func__, func->class, func->vendor, func->device,
-		     func->num, host->ios.clock);
+		     func->num, host->ios.clock,
+		     SDIOHAL_RX_RECVBUF_LEN >> 10,
+		     SDIOHAL_32_BIT_RX_RECVBUF_LEN >> 10);
 
 #ifdef CONFIG_AML_BOARD
 	/*
 	 * setting sdio max request size to 512kB
 	 * to improve transmission efficiency.
 	 */
-	sdio_set_max_reqsz(0x80000);
+	sdio_set_max_regs(0x80000);
 #endif
 
 	ret = sdiohal_get_dev_func(func);
@@ -1974,6 +2053,10 @@ static int sdiohal_probe(struct sdio_func *func,
 	/* calling rescan callback to inform download */
 	if (scan_card_notify != NULL)
 		scan_card_notify();
+
+	sdiohal_info("%s: sdio_dev_host, max_req_size=0x%x, max_blk_count=0x%x, max_blk_size=0x%x\n",
+		__func__, p_data->sdio_dev_host->max_req_size,
+		p_data->sdio_dev_host->max_blk_count, p_data->sdio_dev_host->max_blk_size);
 
 	sdiohal_debug("rescan callback:%p\n", scan_card_notify);
 	sdiohal_info("probe ok\n");
@@ -2064,6 +2147,7 @@ static struct sdio_driver sdiohal_driver = {
 	.id_table = sdiohal_ids,
 	.drv = {
 		.pm = &sdiohal_pm_ops,
+		.shutdown = sdiohal_shutdown,
 	},
 };
 
@@ -2150,12 +2234,16 @@ int sdiohal_scan_card(void)
 		 * If reset pin NC, don't need to reset sdio slave.
 		 */
 		if (p_data->sdio_dev_host != NULL)
+#if KERNEL_VERSION(4, 18, 20) >= LINUX_VERSION_CODE
 			mmc_power_restore_host(p_data->sdio_dev_host);
+#else
+			mmc_power_up(p_data->sdio_dev_host, p_data->sdio_dev_host->card->ocr);
+#endif
 		/*
 		 * setting sdio max request size to 512kB
 		 * to improve transmission efficiency.
 		 */
-		sdio_set_max_reqsz(0x80000);
+		sdio_set_max_regs(0x80000);
 
 		if (!p_data->pwrseq) {
 			/* Enable Function 1 */

@@ -59,6 +59,12 @@
 #define BOOST_TXNUM_LEVEL	16
 #define BOOST_RXNUM_LEVEL	16
 
+/*will not drop TCP ACK if TCPRX tp under this Mb level*/
+#define DROPACK_TP_TH_IN_M	40
+
+/*count RX TP timer in ms*/
+#define RX_TP_COUNT_IN_MS	500
+
 #ifdef SPRDWL_TX_SELF
 #include <linux/wakelock.h>
 struct sprdwl_tx_buf {
@@ -300,4 +306,6 @@ void sprdwl_unboost(void);
 void adjust_txnum_level(char *buf, unsigned char offset);
 void adjust_rxnum_level(char *buf, unsigned char offset);
 void sprdwl_bus_deinit(void);
+
+void sprdwl_count_rx_tp_tcp_ack(struct sprdwl_intf *intf, u32 len);
 #endif /* __SPRDWL_INTF_SDIO_SC2355_H__ */

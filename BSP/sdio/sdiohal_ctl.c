@@ -9,6 +9,7 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
+
 #include <wcn_bus.h>
 
 #include "sdiohal.h"
@@ -96,8 +97,15 @@ char *tp_tx_buf[TP_TX_BUF_CNT];
 
 struct mchn_ops_t at_tx_ops;
 struct mchn_ops_t at_rx_ops;
+
+#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE
 struct timespec tp_tx_start_time;
 struct timespec tp_tx_stop_time;
+#else
+struct timeval tp_tx_start_time;
+struct timeval tp_tx_stop_time;
+#endif
+
 int tp_tx_cnt;
 int tp_tx_flag;
 int tp_tx_buf_cnt = TP_TX_BUF_CNT;
@@ -539,8 +547,14 @@ int at_list_tx_pop(int channel, struct mbuf_t *head,
 }
 
 int tp_rx_cnt;
+#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE
 struct timespec tp_rx_start_time;
 struct timespec tp_rx_stop_time;
+#else
+struct timeval tp_rx_start_time;
+struct timeval tp_rx_stop_time;
+#endif
+
 struct timespec tp_tm_begin;
 int at_list_rx_pop(int channel, struct mbuf_t *head,
 		   struct mbuf_t *tail, int num)
@@ -1045,7 +1059,7 @@ static ssize_t at_cmd_write(struct file *filp,
 
 	if (strncmp(cmd_buf + PUB_HEAD_RSV, "sdio_int", 8) == 0) {
 		unsigned long int int_bitmap;
-		unsigned int addr;
+		unsigned int addr=0;
 
 		if (strncmp(cmd_buf + PUB_HEAD_RSV, "sdio_int_rx", 11) == 0)
 			sdiohal_test_int_init(SDIOHAL_INT_PWR_FUNC);
@@ -1064,6 +1078,9 @@ static ssize_t at_cmd_write(struct file *filp,
 
 			if (int_bitmap & 0xff00)
 				addr = REG_TO_CP0_REQ1;
+
+
+			
 			sprdwcn_bus_aon_writeb(addr, int_bitmap >> 8);
 		}
 

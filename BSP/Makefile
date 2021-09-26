@@ -4,8 +4,6 @@ CURFOLDER ?= $(pwd)
 LD_CFLAGS += -D__linux__
 EXTRA_CFLAGS=-fno-pic
 
-ccflags-y += -Wno-implicit-function-declaration -Wno-macro-redefined -Wno-sometimes-uninitialized
-
 all_dependencies := driver
 driver_dependencies :=
 BIN2HEX_TOOL := $(PWD)/fw/bin2hex
@@ -114,6 +112,12 @@ endif
 ifneq ($(UNISOC_SDIO_IRQ_TYPE_CONFIG),)
 ccflags-y += -DCONFIG_CUSTOMIZE_SDIO_IRQ_TYPE=$(UNISOC_SDIO_IRQ_TYPE_CONFIG)
 endif
+ifneq ($(UNISOC_32_BIT_RX_RECVBUF_LEN_CONFIG),)
+ccflags-y += -DCONFIG_CUSTOMIZE_32_BIT_RX_RECVBUF_LEN=$(UNISOC_32_BIT_RX_RECVBUF_LEN_CONFIG)
+endif
+ifneq ($(UNISOC_64_BIT_RX_RECVBUF_LEN_CONFIG),)
+ccflags-y += -DCONFIG_CUSTOMIZE_64_BIT_RX_RECVBUF_LEN=$(UNISOC_64_BIT_RX_RECVBUF_LEN_CONFIG)
+endif
 
 #### add cflag ######
 ifeq ($(CONFIG_WCN_SDIO),y)
@@ -139,7 +143,6 @@ endif
 ccflags-y += -DCONFIG_WCN_BOOT
 ccflags-y += -DCONFIG_WCN_UTILS
 
-
 #### include path ######
 ccflags-y += -I$(src)/include/
 ccflags-y += -I$(src)/platform/
@@ -147,7 +150,6 @@ ccflags-y += -I$(src)/platform/rf/
 ccflags-y += -I$(KERNEL_SRC)/$(M)/include/
 ccflags-y += -I$(KERNEL_SRC)/$(M)/platform/
 ccflags-y += -I$(KERNEL_SRC)/$(M)/include/rf/
-
 #### add cflag for Customer ######
 ### ---------- Hisilicon start ---------- ###
 ifeq ($(CFG_HI_WIFI_DEVICE_UWE5621),y)
@@ -240,7 +242,7 @@ ccflags-y += -DCONFIG_AML_BOARD
 #ccflags-y += -DCONFIG_WCN_PARSE_DTS
 #ccflags-y += -DCONFIG_WCN_CHIPEN
 #ccflags-y += -DCONFIG_WCN_RESET
-ccflags-y += -DCONFIG_WCN_RESET_PIN_CONNECTED
+#ccflags-y += -DCONFIG_WCN_RESET_PIN_CONNECTED
 ccflags-y += -DCONFIG_WCN_POWER_UP_DOWN
 ccflags-y += -DCONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
 ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
@@ -254,7 +256,7 @@ ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
 #ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
 #ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
 # ccflags-y += -DCONFIG_SDIO_INBAND_INT
-ccflags-y += -DCONFIG_CUSTOMIZE_SDIO_IRQ_TYPE=2
+ccflags-y += -DCONFIG_CUSTOMIZE_SDIO_IRQ_TYPE=3
 #ccflags-y += -DCONFIG_SDIO_INBAND_POLLING
 ccflags-y += -DCONFIG_SDIO_BLKSIZE_512
 #ccflags-y += -DCONFIG_SDIO_PWRSEQ
@@ -383,6 +385,38 @@ all_dependencies += install
 endif
 ### ---------- MTK end ---------- ###
 
+### ---------- Mediatek start ---------- ###
+ifeq ($(CFG_MTK_WIFI_DEVICE_UWE5623),y)
+#### add cflag ######
+ccflags-y += -DCONFIG_MTK_BOARD
+#ccflags-y += -DCONFIG_WCN_PARSE_DTS
+#ccflags-y += -DCONFIG_WCN_CHIPEN
+#ccflags-y += -DCONFIG_WCN_RESET
+#ccflags-y += -DCONFIG_WCN_RESET_PIN_CONNECTED
+ccflags-y += -DCONFIG_WCN_POWER_UP_DOWN
+#ccflags-y += -DCONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
+ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
+#ccflags-y += -DCONFIG_WL_WAKE_HOST_EN
+#ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
+#ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
+#ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
+#ccflags-y += -DCONFIG_WCN_LOOPCHECK
+#ccflags-y += -DCONFIG_CPLOG_DEBUG
+
+#ccflags-y += -DCONFIG_MEM_PD
+#ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
+#ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
+ccflags-y += -DCONFIG_SDIO_INBAND_INT
+#ccflags-y += -DCONFIG_CUSTOMIZE_SDIO_IRQ_TYPE=2
+#ccflags-y += -DCONFIG_SDIO_INBAND_POLLING
+ccflags-y += -DCONFIG_SDIO_BLKSIZE_512
+#ccflags-y += -DCONFIG_SDIO_PWRSEQ
+
+all_dependencies += install
+endif
+
+### ---------- Mediatek end ---------- ###
+
 ifdef CONFIG_WCN_BSP_DRIVER_BUILDIN
 #
 # Support sprdwcn_bsp build-in.
@@ -475,6 +509,3 @@ clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
 	$(RM) Module.markers
 	$(RM) modules.order
-
-#modules:
-#	$(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KERNEL_SRC) M=$(M)  modules

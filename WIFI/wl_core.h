@@ -198,6 +198,10 @@ struct sprdwl_intf {
 	u8 boost;
 	unsigned int txnum_level;
 	unsigned int rxnum_level;
+	/*tcpack*/
+	unsigned int tcpack_delay_th_in_mb;
+	unsigned int tcpack_time_in_ms;
+
 #ifdef STA_SOFTAP_SCC_MODE
 	int sta_home_channel;
 #endif

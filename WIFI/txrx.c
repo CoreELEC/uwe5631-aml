@@ -236,6 +236,10 @@ void sprdwl_rx_skb_process(struct sprdwl_priv *priv, struct sk_buff *skb)
 
 		/* skb->data MUST point to ETH HDR */
 		sprdwl_filter_rx_tcp_ack(priv, skb->data, msdu_desc->msdu_len);
+		/*adjust drop tcpack enable or not*/
+#ifdef TCPACK_DROP_DYNAMIC
+		sprdwl_count_rx_tp_tcp_ack(intf, msdu_desc->msdu_len);
+#endif
 		sprdwl_netif_rx(skb, ndev);
 	}
 

@@ -545,15 +545,22 @@ static struct rx_ba_node
 
 void reset_pn(struct sprdwl_priv *priv, const u8 *mac_addr)
 {
-	struct sprdwl_intf *intf = (struct sprdwl_intf *)(priv->hw_priv);
-	struct sprdwl_rx_if *rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
-	struct sprdwl_rx_ba_entry *ba_entry = &rx_if->ba_entry;
+	struct sprdwl_intf *intf = NULL;
+	struct sprdwl_rx_if *rx_if = NULL;
+	struct sprdwl_rx_ba_entry *ba_entry = NULL;
 	unsigned char i, tid, lut_id = 0xff;
 	struct rx_ba_node *ba_node = NULL;
 
-	if (!mac_addr || !priv)
+	if (!mac_addr)
 		return;
-
+	if (priv) {
+		intf = (struct sprdwl_intf *)(priv->hw_priv);
+		rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
+		ba_entry = &rx_if->ba_entry;
+	} else {
+		wl_info("%s: parameter priv is NULL\n", __func__);
+		return;
+	}
 	for (i = 0; i < MAX_LUT_NUM; i++) {
 		if (ether_addr_equal(intf->peer_entry[i].tx.da, mac_addr)) {
 			lut_id = intf->peer_entry[i].lut_index;
@@ -626,6 +633,8 @@ static void wlan_filter_event(struct sprdwl_rx_ba_entry *ba_entry,
 		msdu_desc.pn_l = 0;
 		msdu_desc.pn_h = 0;
 		msdu_desc.cipher_type = 0;
+		msdu_desc.tid = ba_event->tid;
+		msdu_desc.sta_lut_index = ba_event->sta_lut_index;
 		reorder_msdu_process(ba_entry, &msdu_desc, NULL, ba_node);
 	}
 }
@@ -955,10 +964,14 @@ static void ba_reorder_timeout(unsigned long data)
 		spin_unlock_bh(&ba_entry->skb_list_lock);
 
 #ifndef RX_NAPI
+#ifdef SPRD_RX_THREAD
+		rx_up(rx_if);
+#else
 		if (!work_pending(&rx_if->rx_work)) {
 			wl_info("%s: queue rx workqueue\n", __func__);
 			queue_work(rx_if->rx_queue, &rx_if->rx_work);
 		}
+#endif
 #else
 		napi_schedule(&rx_if->napi_rx);
 #endif

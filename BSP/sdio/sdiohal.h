@@ -126,12 +126,20 @@ extern long int sdiohal_log_level;
 #define SDIOHAL_RX_NODE_NUM (12 << 10)
 
 /* for 64 bit sys */
+#ifdef CONFIG_CUSTOMIZE_64_BIT_RX_RECVBUF_LEN
+#define SDIOHAL_RX_RECVBUF_LEN (CONFIG_CUSTOMIZE_64_BIT_RX_RECVBUF_LEN << 10)
+#else
 #define SDIOHAL_RX_RECVBUF_LEN (MAX_CHAIN_NODE_NUM * MAX_MBUF_SIZE)
+#endif
 #define SDIOHAL_FRAG_PAGE_MAX_ORDER \
 	get_order(SDIOHAL_RX_RECVBUF_LEN)
 
 /* for 32 bit sys */
-#define SDIOHAL_32_BIT_RX_RECVBUF_LEN (16 << 10)
+#ifdef CONFIG_CUSTOMIZE_32_BIT_RX_RECVBUF_LEN
+#define SDIOHAL_32_BIT_RX_RECVBUF_LEN (CONFIG_CUSTOMIZE_32_BIT_RX_RECVBUF_LEN << 10)
+#else
+#define SDIOHAL_32_BIT_RX_RECVBUF_LEN (128 << 10)
+#endif
 #define SDIOHAL_FRAG_PAGE_MAX_ORDER_32_BIT \
 	get_order(SDIOHAL_32_BIT_RX_RECVBUF_LEN)
 
@@ -253,8 +261,15 @@ extern long int sdiohal_log_level;
 #define WCN_CARD_EXIST(xmit) \
 	(atomic_read(xmit) < SDIOHAL_REMOVE_CARD_VAL)
 
+/*refer from struct page_frag*/
+struct sprd_page_frag {
+	struct page *page;
+	__u32 offset;
+	__u32 size;
+};
+
 struct sdiohal_frag_mg {
-	struct page_frag frag;
+	struct sprd_page_frag frag;
 	unsigned int pagecnt_bias;
 };
 

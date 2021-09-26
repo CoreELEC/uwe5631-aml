@@ -1,13 +1,11 @@
 PWD := $(shell pwd)
 all_dependencies := driver
-
-ccflags-y += -Wno-implicit-function-declaration -Wno-macro-redefined -Wno-sometimes-uninitialized -Wfortify-source
-ccflags-y += -I$(KERNEL_SRC)/$(M)/../BSP/include/
-
+ccflags-y += -I/home2/tianqu.gan/aml/aml/5621/unisoc/uwe5621ds/BSP/include
+ccflags-y += -Wno-implicit-function-declaration -Wno-macro-redefined -Wno-sometimes-uninitialized
 ifneq ($(UNISOC_BSP_INCLUDE),)
 ccflags-y += -I$(UNISOC_BSP_INCLUDE)
 endif
-
+ccflags-y += -I$(KERNEL_SRC)/$(M)/../BSP/include/
 ifneq ($(UNISOC_WIFI_CUS_CONFIG),)
 ccflags-y += -DCUSTOMIZE_WIFI_CFG_PATH=\"$(UNISOC_WIFI_CUS_CONFIG)\"
 endif
@@ -71,6 +69,7 @@ $(MODULE_NAME)-objs += rnd_mac_addr.o
 $(MODULE_NAME)-objs += debug.o
 #$(MODULE_NAME)-objs += 11h.o
 
+M ?= $(shell pwd)
 all: $(all_dependencies)
 driver: $(driver_dependencies)
 	@echo build driver
@@ -80,3 +79,6 @@ clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
 	$(RM) Module.markers
 	$(RM) modules.order
+
+modules:
+	$(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KERNEL_SRC) M=$(M)  modules

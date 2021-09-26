@@ -155,6 +155,10 @@ static struct sk_buff
 			 __func__, msdu_desc->more_frag_bit, node->msdu_len);
 		if (!msdu_desc->more_frag_bit) {
 			skb = skb_dequeue(&node->skb_list);
+			if (!skb) {
+				wl_err("%s:get skb buffer failed\n", __func__);
+				return NULL;
+			}
 			msdu_desc = (struct rx_msdu_desc *)skb->data;
 			offset = msdu_total_len(msdu_desc);
 			msdu_desc->msdu_len =

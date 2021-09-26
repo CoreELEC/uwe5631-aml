@@ -367,8 +367,13 @@ void sprdwl_count_tx_tp(struct sprdwl_tx_msg *tx_msg, int num)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	timeus = div_u64(tx_msg->txtimeend.tv64 - tx_msg->txtimebegin.tv64, NSEC_PER_USEC);
 #else
-	timeus = ktime_to_us(tx_msg->txtimeend - tx_msg->txtimebegin);
+	timeus = div_u64(tx_msg->txtimeend - tx_msg->txtimebegin, NSEC_PER_USEC);
 #endif
+
+	if(!timeus) {
+		return;
+	}
+
 	if (div_u64((tx_msg->tx_data_num * 1000), timeus) >= intf->txnum_level &&
 		tx_msg->tx_data_num >= 1000) {
 		tx_msg->tx_data_num = 0;
@@ -1038,8 +1043,13 @@ void sprdwl_count_rx_tp(struct sprdwl_rx_if *rx_if, int num)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	timeus = div_u64(rx_if->rxtimeend.tv64 - rx_if->rxtimebegin.tv64, NSEC_PER_USEC);
 #else
-	timeus = ktime_to_us(rx_if->rxtimeend - rx_if->rxtimebegin);
+	timeus = div_u64(rx_if->rxtimeend - rx_if->rxtimebegin, NSEC_PER_USEC);
 #endif
+
+	if(!timeus) {
+		return;
+	}
+
 	if (div_u64((rx_if->rx_data_num * 1000), timeus) >= intf->rxnum_level &&
 		rx_if->rx_data_num >= 1000) {
 		rx_if->rx_data_num = 0;
@@ -1110,8 +1120,11 @@ static int intf_rx_handle(int chn, struct mbuf_t *head,
 	msg->data = (void *)tail;
 
 	sprdwl_queue_msg_buf(msg, &rx_if->rx_list);
+#ifdef SPRD_RX_THREAD
+	rx_up(rx_if);
+#else
 	queue_work(rx_if->rx_queue, &rx_if->rx_work);
-
+#endif
 	return 0;
 }
 
@@ -1845,6 +1858,39 @@ void adjust_rxnum_level(char *buf, unsigned char offset)
 #undef MAX_LEN
 }
 
+void sprdwl_count_rx_tp_tcp_ack(struct sprdwl_intf *intf, u32 len)
+{
+	unsigned long long timeus = 0;
+	struct sprdwl_rx_if *rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
+
+	rx_if->rx_total_len += (unsigned long)len;
+	if (rx_if->rx_total_len == (unsigned long)len) {
+		rx_if->rxtimebegin = ktime_get();
+		return;
+	}
+
+	rx_if->rxtimeend = ktime_get();
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+	timeus = div_u64(rx_if->rxtimeend.tv64 - rx_if->rxtimebegin.tv64, NSEC_PER_USEC);
+#else
+	timeus = div_u64(rx_if->rxtimeend - rx_if->rxtimebegin, NSEC_PER_USEC);
+#endif
+
+	if(!timeus) {
+		return;
+	}
+
+	if (div_u64(((unsigned long long)rx_if->rx_total_len * 8 ) , (u32)timeus) >= (unsigned long long)intf->tcpack_delay_th_in_mb &&
+		timeus > (unsigned long long)intf->tcpack_time_in_ms * USEC_PER_MSEC) {
+		rx_if->rx_total_len = 0;
+		enable_tcp_ack_delay("tcpack_delay_en=1", strlen("tcpack_delay_en="));
+	} else if (div_u64((rx_if->rx_total_len * 8 ) , (u32)timeus) < intf->tcpack_delay_th_in_mb &&
+		timeus > intf->tcpack_time_in_ms * USEC_PER_MSEC) {
+		rx_if->rx_total_len = 0;
+		enable_tcp_ack_delay("tcpack_delay_en=0", strlen("tcpack_delay_en="));
+	}
+}
+
 int sprdwl_bus_init(struct sprdwl_priv *priv)
 {
 	int ret = -EINVAL, chn = 0;
@@ -1915,6 +1961,9 @@ int sprdwl_intf_init(struct sprdwl_priv *priv, struct sprdwl_intf *intf)
 	intf->txnum_level = BOOST_TXNUM_LEVEL;
 	intf->rxnum_level = BOOST_RXNUM_LEVEL;
 	intf->boost = 0;
+	intf->tcpack_time_in_ms = RX_TP_COUNT_IN_MS;
+	intf->tcpack_delay_th_in_mb = DROPACK_TP_TH_IN_M;
+
 #ifdef UNISOC_WIFI_PS
 	init_completion(&intf->suspend_completed);
 #endif

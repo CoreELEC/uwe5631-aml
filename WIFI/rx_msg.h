@@ -43,10 +43,13 @@ struct sprdwl_rx_if {
 	struct sprdwl_intf *intf;
 
 	struct sprdwl_msg_list rx_list;
-
+#ifdef SPRD_RX_THREAD
+	struct task_struct *rx_thread;
+	struct completion rx_completed;
+#else
 	struct work_struct rx_work;
 	struct workqueue_struct *rx_queue;
-
+#endif
 #ifdef RX_NAPI
 	struct sprdwl_msg_list rx_data_list;
 	struct napi_struct napi_rx;
@@ -62,6 +65,7 @@ struct sprdwl_rx_if {
 	struct workqueue_struct *rx_net_workq;
 #endif
 	unsigned long rx_data_num;
+	unsigned long rx_total_len;
 	ktime_t rxtimebegin;
 	ktime_t rxtimeend;
 };
@@ -260,6 +264,9 @@ void sprdwl_rx_send_cmd(struct sprdwl_intf *intf, void *data, int len,
 			unsigned char id, unsigned char ctx_id);
 int sprdwl_pkt_log_save(struct sprdwl_intf *intf, void *data);
 void sprdwl_rx_napi_init(struct net_device *ndev, struct sprdwl_intf *intf);
+#ifdef SPRD_RX_THREAD
+void rx_up(struct sprdwl_rx_if* rx_if);
+#endif
 int sprdwl_rx_init(struct sprdwl_intf *intf);
 int sprdwl_rx_deinit(struct sprdwl_intf *intf);
 

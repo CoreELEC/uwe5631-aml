@@ -260,6 +260,7 @@ static int sprdwl_nl_get_info_handler(struct sk_buff *skb_2,
 	}
 	return ret;
 }
+
 /*
 static struct nla_policy sprdwl_genl_policy[SPRDWL_NL_ATTR_MAX + 1] = {
 	[SPRDWL_NL_ATTR_AP2CP] = {.type = NLA_BINARY, .len = 1024},

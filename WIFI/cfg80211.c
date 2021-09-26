@@ -2187,6 +2187,7 @@ void sprdwl_report_scan_result(struct sprdwl_vif *vif, u16 chan, s16 rssi,
 	u64 tsf;
 	u8 *ie;
 	size_t ielen;
+	u8 *ssid_ie;
 
 	if (!priv->scan_request && !priv->sched_scan_request) {
 		wl_ndev_log(L_DBG, vif->ndev, "%s Unexpected event\n", __func__);
@@ -2236,6 +2237,28 @@ void sprdwl_report_scan_result(struct sprdwl_vif *vif, u16 chan, s16 rssi,
 	tsf = (u64)ts.tv_sec * 1000000 + div_u64(ts.tv_nsec, 1000);
 	beacon_interval = le16_to_cpu(mgmt->u.probe_resp.beacon_int);
 	capability = le16_to_cpu(mgmt->u.probe_resp.capab_info);
+
+	/* for hidden ssid, cp report results: ssid value :0x00, need driver cover*/
+	/* modify ssid of ie using vif->ssid, when ssid is hidden and (mgmt->bssid==vif->bssid  && state=connected) */
+	if((vif->sm_state == SPRDWL_CONNECTED) && (ether_addr_equal(vif->bssid, mgmt->bssid))) {
+		wl_info("%s, ssid:%s, bssid:(%pM), ssid len is %d\n", __func__, vif->ssid, vif->bssid, vif->ssid_len);
+		ssid_ie = (u8 *)cfg80211_find_ie(WLAN_EID_SSID, ie, ielen);
+		if (ssid_ie) {
+			if (ssid_ie[1] != 0) {//ssid_ie[1] is length of ssid
+				int index = 0;
+				int hidden_ssid = 0;
+				for (index = 0; index < ssid_ie[1]; index++) {
+					hidden_ssid |=  ssid_ie[2 + index];
+					if(hidden_ssid)//ssid is not hidden
+						break;
+				}
+
+				if ((!hidden_ssid) && (vif->ssid_len == ssid_ie[1])) {//hidden ssid && len is equal
+					strncpy(ssid_ie + 2, vif->ssid, vif->ssid_len);
+				}
+			}
+		}
+	}
 
 	wl_ndev_log(L_DBG, vif->ndev, "   %s, %pM, channel %2u, signal %d\n",
 		    ieee80211_is_probe_resp(mgmt->frame_control)

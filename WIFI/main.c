@@ -699,16 +699,25 @@ static int sprdwl_set_power_save(struct net_device *ndev, struct ifreq *ifr)
 	struct android_wifi_priv_cmd priv_cmd;
 	char *command = NULL;
 	int ret = 0, skip, value;
+	int max_len = 0;
 
 	if (!ifr->ifr_data)
 		return -EINVAL;
 	if (copy_from_user(&priv_cmd, ifr->ifr_data, sizeof(priv_cmd)))
 		return -EFAULT;
 
-	command = kmalloc(priv_cmd.total_len, GFP_KERNEL);
+	/*add length check to avoid invalid NULL ptr*/
+	if (!priv_cmd.total_len) {
+		wl_ndev_log(L_INFO, ndev, "%s: priv cmd total len is invalid\n", __func__);
+		return -EINVAL;
+	}
+
+	/* fix max_len for mv300(total_len = 4096) */
+	max_len = priv_cmd.total_len > MAX_PRIV_CMD_LEN ? MAX_PRIV_CMD_LEN : priv_cmd.total_len;
+	command = kmalloc(max_len, GFP_KERNEL);
 	if (!command)
 		return -ENOMEM;
-	if (copy_from_user(command, priv_cmd.buf, priv_cmd.total_len)) {
+	if (copy_from_user(command, priv_cmd.buf, max_len)) {
 		ret = -EFAULT;
 		goto out;
 	}
@@ -749,6 +758,7 @@ static int sprdwl_set_tlv(struct net_device *ndev, struct ifreq *ifr)
 	struct android_wifi_priv_cmd priv_cmd;
 	struct sprdwl_tlv_data *tlv;
 	int ret;
+	int max_len = 0;
 
 	if (!ifr->ifr_data)
 		return -EINVAL;
@@ -759,11 +769,12 @@ static int sprdwl_set_tlv(struct net_device *ndev, struct ifreq *ifr)
 	if (priv_cmd.total_len < sizeof(*tlv))
 		return -EINVAL;
 
-	tlv = kmalloc(priv_cmd.total_len, GFP_KERNEL);
+	max_len = priv_cmd.total_len > MAX_PRIV_CMD_LEN ? MAX_PRIV_CMD_LEN : priv_cmd.total_len;
+	tlv = kmalloc(max_len, GFP_KERNEL);
 	if (!tlv)
 		return -ENOMEM;
 
-	if (copy_from_user(tlv, priv_cmd.buf, priv_cmd.total_len)) {
+	if (copy_from_user(tlv, priv_cmd.buf, max_len)) {
 		ret = -EFAULT;
 		goto out;
 	}
@@ -797,7 +808,7 @@ static int sprdwl_set_tlv(struct net_device *ndev, struct ifreq *ifr)
 		}
 	}
 
-	ret = sprdwl_set_tlv_data(priv, vif->ctx_id, tlv, priv_cmd.total_len);
+	ret = sprdwl_set_tlv_data(priv, vif->ctx_id, tlv, max_len);
 	if (ret)
 		wl_ndev_log(L_ERR, ndev, "%s set tlv(type=%#x) error\n",
 			   __func__, tlv->type);
@@ -1175,6 +1186,10 @@ static void sprdwl_set_mac_addr(struct sprdwl_vif *vif, u8 *pending_addr,
 		sprdwl_get_mac_from_file(vif, addr);
 	}
 
+	if (!priv) {
+		netdev_err(vif->ndev, "%s get pirv failed\n", __func__);
+		return;
+	}
 	switch (type) {
 	case NL80211_IFTYPE_STATION:
 		ether_addr_copy(priv->default_mac, addr);

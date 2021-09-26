@@ -1450,6 +1450,9 @@ int sdiohal_misc_init(void)
 	sdiohal_tx_sendbuf_init();
 	ret = sdiohal_eof_buf_init();
 
+	sdiohal_err(" sdio, BITS =%u, PageSize =%lu, order=%u, %u\n",
+		BITS_PER_LONG, PAGE_SIZE, SDIOHAL_FRAG_PAGE_MAX_ORDER, SDIOHAL_FRAG_PAGE_MAX_ORDER_32_BIT);
+
 	return ret;
 }
 
