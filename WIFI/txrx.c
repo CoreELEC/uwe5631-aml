@@ -167,8 +167,10 @@ void sprdwl_rx_skb_process(struct sprdwl_priv *priv, struct sk_buff *skb)
 	struct sk_buff *tx_skb = NULL;
 	struct sprdwl_intf *intf;
 	struct ethhdr *eth;
+	struct sprdwl_rx_if *rx_if;
 
 	intf = (struct sprdwl_intf *)priv->hw_priv;
+	rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
 
 	if (unlikely(!priv)) {
 		wl_err("%s priv not init.\n", __func__);
@@ -179,6 +181,38 @@ void sprdwl_rx_skb_process(struct sprdwl_priv *priv, struct sk_buff *skb)
 	if (msdu_desc->ctx_id >= SPRDWL_MAC_INDEX_MAX) {
 		wl_err("%s [ctx_id %d]RX err\n", __func__, msdu_desc->ctx_id);
 		goto err;
+	}
+
+	if ((msdu_desc->amsdu_flag == 1) && (msdu_desc->snap_hdr_present == 0) &&
+		(msdu_desc->first_msdu_of_mpdu == 1)) {
+		rx_if->rx_snaphdr_flag = 1;
+		rx_if->rx_snaphdr_seqnum = msdu_desc->seq_num;
+		rx_if->rx_snaphdr_lut = msdu_desc->sta_lut_index;
+		rx_if->rx_snaphdr_tid = msdu_desc->tid;
+		wl_info("%s snaphdr attect flag %d %d %d\n", __func__, msdu_desc->seq_num,
+					msdu_desc->sta_lut_index, msdu_desc->tid);
+		if (msdu_desc->last_buff_of_mpdu == 1) {
+			rx_if->rx_snaphdr_flag = 0;
+			wl_info("%s snaphdr attect over %d last %d %d %d\n", __func__, msdu_desc->snap_hdr_present,
+				msdu_desc->last_msdu_of_mpdu, msdu_desc->last_buff_of_mpdu, msdu_desc->last_msdu_of_buff);
+		}
+		goto err;
+	}
+
+	if(rx_if->rx_snaphdr_flag == 1) {
+		if ((rx_if->rx_snaphdr_seqnum == msdu_desc->seq_num) &&
+			(rx_if->rx_snaphdr_lut == msdu_desc->sta_lut_index) &&
+			(rx_if->rx_snaphdr_tid == msdu_desc->tid)) {
+			wl_err("%s snaphdr attect %d %d %d\n", __func__, msdu_desc->seq_num,
+				msdu_desc->sta_lut_index, msdu_desc->tid);
+			if (msdu_desc->last_buff_of_mpdu == 1) {
+				rx_if->rx_snaphdr_flag = 0;
+				wl_info("%s snaphdr attect over %d %d %d %d last %d %d %d\n", __func__, msdu_desc->snap_hdr_present,
+					msdu_desc->seq_num, msdu_desc->sta_lut_index, msdu_desc->tid,
+					msdu_desc->last_msdu_of_mpdu, msdu_desc->last_buff_of_mpdu, msdu_desc->last_msdu_of_buff);
+			}
+			goto err;
+		}
 	}
 
 	vif = ctx_id_to_vif(priv, msdu_desc->ctx_id);
