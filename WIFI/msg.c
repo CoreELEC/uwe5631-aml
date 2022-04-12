@@ -17,7 +17,6 @@
 
 #include "sprdwl.h"
 #include "msg.h"
-#include "wcn_wrapper.h"
 /* static struct sprdwl_msg_list msg_list */
 
 int sprdwl_msg_init(int num, struct sprdwl_msg_list *list)

@@ -187,6 +187,7 @@ nla_policy sprdwl_nl80211_ftm_meas_param_policy[
 	[SPRDWL_VENDOR_ATTR_FTM_PARAM_BURST_PERIOD] = { .type = NLA_U16 },
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 static u8 sprdwl_ftm_get_channel(struct wiphy *wiphy,
 				 const u8 *mac_addr, u32 freq)
 {
@@ -962,4 +963,5 @@ void sprdwl_ftm_stop_operations(struct sprdwl_priv *priv)
 	sprdwl_ftm_session_ended(
 		priv, SPRDWL_VENDOR_ATTR_LOC_SESSION_STATUS_ABORTED);
 }
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
 

@@ -504,6 +504,7 @@ struct sprdwl_rtt_responder {
 	enum wifi_rtt_preamble preamble;
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 int sprdwl_ftm_get_capabilities(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len);
@@ -523,6 +524,7 @@ int sprdwl_event_ftm(struct sprdwl_vif *vif, u8 *data, u16 len);
 void sprdwl_ftm_init(struct sprdwl_priv *priv);
 void sprdwl_ftm_deinit(struct sprdwl_priv *priv);
 void sprdwl_ftm_stop_operations(struct sprdwl_priv *priv);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
 
 #endif /* __SPRD_RTT_H__ */
 

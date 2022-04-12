@@ -1378,7 +1378,6 @@ static int sprdwl_tx_work_queue(void *data)
 		     !list_empty(&tx_msg->xmit_msg_list.to_free_list))) {
 				struct sprdwl_vif *vif;
 
-				sprdwcn_bus_sleep_wakeup(WIFI);
 				vif = mode_to_vif(priv, tx_msg->mode);
 				intf->fw_power_down = 0;
 				sprdwl_work_host_wakeup_fw(vif);

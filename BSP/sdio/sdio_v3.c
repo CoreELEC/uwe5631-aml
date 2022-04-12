@@ -125,27 +125,6 @@ static void sdio_remove_card(void)
 	return sdiohal_remove_card();
 }
 
-static void sdiohal_cp_allow_sleep(enum slp_subsys subsys)
-{
-#ifdef CONFIG_WCN_SLP
-#ifdef CONFIG_CPLOG_DEBUG
-	sdiohal_info("%s entry\n", __func__);
-#endif
-	slp_mgr_drv_sleep(subsys, true);
-#endif
-}
-
-static void sdiohal_cp_sleep_wakeup(enum slp_subsys subsys)
-{
-#ifdef CONFIG_WCN_SLP
-#ifdef CONFIG_CPLOG_DEBUG
-	sdiohal_info("%s entry\n", __func__);
-#endif
-	slp_mgr_drv_sleep(subsys, false);
-	slp_mgr_wakeup(subsys);
-#endif
-}
-
 static struct sprdwcn_bus_ops sdiohal_bus_ops = {
 	.preinit = sdio_preinit,
 	.deinit = sdio_preexit,
@@ -172,6 +151,7 @@ static struct sprdwcn_bus_ops sdiohal_bus_ops = {
 	.register_rescan_cb = sdio_register_rescan_cb,
 	.rescan = sdio_rescan,
 	.remove_card = sdio_remove_card,
+	.get_wl_wake_host_en = sdiohal_get_wl_wake_host_en,
 	.get_tx_mode = sdiohal_get_tx_mode,
 	.get_rx_mode = sdiohal_get_rx_mode,
 	.get_irq_type = sdiohal_get_irq_type,
@@ -179,8 +159,6 @@ static struct sprdwcn_bus_ops sdiohal_bus_ops = {
 	.get_hif_type = sdio_get_hif_type,
 	.driver_register = sdiohal_driver_register,
 	.driver_unregister = sdiohal_driver_unregister,
-	.allow_sleep = sdiohal_cp_allow_sleep,
-	.sleep_wakeup = sdiohal_cp_sleep_wakeup,
 };
 
 void module_bus_init(void)

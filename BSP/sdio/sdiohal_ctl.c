@@ -9,7 +9,6 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
-
 #include <wcn_bus.h>
 
 #include "sdiohal.h"
@@ -97,15 +96,8 @@ char *tp_tx_buf[TP_TX_BUF_CNT];
 
 struct mchn_ops_t at_tx_ops;
 struct mchn_ops_t at_rx_ops;
-
-#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE
 struct timespec tp_tx_start_time;
 struct timespec tp_tx_stop_time;
-#else
-struct timeval tp_tx_start_time;
-struct timeval tp_tx_stop_time;
-#endif
-
 int tp_tx_cnt;
 int tp_tx_flag;
 int tp_tx_buf_cnt = TP_TX_BUF_CNT;
@@ -230,6 +222,7 @@ static int sdiohal_throughput_tx(void)
 static void sdiohal_throughput_tx_compute_time(void)
 {
 	static signed long long times_count;
+	long long tp_mb = 0;
 
 	if (tp_tx_flag != 1)
 		return;
@@ -237,13 +230,14 @@ static void sdiohal_throughput_tx_compute_time(void)
 	/* throughput test */
 	tp_tx_cnt++;
 	if (tp_tx_cnt % 500 == 0) {
-		do_gettimeofday(&tp_tx_stop_time);
-		times_count = timeval_to_ns(&tp_tx_stop_time) -
-			timeval_to_ns(&tp_tx_start_time);
-		sdiohal_info("tx->times(500c) is %lldns, tx %d, rx %d\n",
-			     times_count, tp_tx_cnt, rx_pop_cnt);
+		getnstimeofday(&tp_tx_stop_time);
+		times_count = timespec_to_ns(&tp_tx_stop_time) -
+			timespec_to_ns(&tp_tx_start_time);
+		tp_mb = div_u64(((long long)tp_tx_buf_cnt*(long long)tp_tx_buf_len*8*500*1000), times_count);
+		sdiohal_info("tx->times(500c) is %lldns, tx %d, rx %d, tx_throughtput:%lld Mbps\n",
+			     times_count, tp_tx_cnt, rx_pop_cnt, tp_mb);
 		tp_tx_cnt = 0;
-		do_gettimeofday(&tp_tx_start_time);
+		getnstimeofday(&tp_tx_start_time);
 	}
 	sdiohal_throughput_tx();
 }
@@ -547,14 +541,8 @@ int at_list_tx_pop(int channel, struct mbuf_t *head,
 }
 
 int tp_rx_cnt;
-#if KERNEL_VERSION(5, 0, 0) <= LINUX_VERSION_CODE
 struct timespec tp_rx_start_time;
 struct timespec tp_rx_stop_time;
-#else
-struct timeval tp_rx_start_time;
-struct timeval tp_rx_stop_time;
-#endif
-
 struct timespec tp_tm_begin;
 int at_list_rx_pop(int channel, struct mbuf_t *head,
 		   struct mbuf_t *tail, int num)
@@ -576,13 +564,13 @@ int at_list_rx_pop(int channel, struct mbuf_t *head,
 	/* throughput test */
 	tp_rx_cnt += num;
 	if (tp_rx_cnt / (500*64) == 1) {
-		do_gettimeofday(&tp_rx_stop_time);
-		times_count = timeval_to_ns(&tp_rx_stop_time)
-			- timeval_to_ns(&tp_rx_start_time);
+		getnstimeofday(&tp_rx_stop_time);
+		times_count = timespec_to_ns(&tp_rx_stop_time)
+			- timespec_to_ns(&tp_rx_start_time);
 		sdiohal_info("rx->times(%dc) is %lldns, tx %d, rx %d\n",
 			     tp_rx_cnt, times_count, tp_tx_cnt, rx_pop_cnt);
 		tp_rx_cnt = 0;
-		do_gettimeofday(&tp_rx_start_time);
+		getnstimeofday(&tp_rx_start_time);
 	}
 	getnstimeofday(&tp_tm_begin);
 
@@ -838,6 +826,10 @@ static ssize_t at_cmd_write(struct file *filp,
 	long int long_data;
 	int ret;
 	unsigned char *send_buf = NULL;
+	unsigned long int int_bitmap = 0;
+	unsigned int addr = 0;
+	long int reg_addr_read;
+	unsigned int reg_addr, reg_val;
 
 	if (count > SDIOHAL_WRITE_SIZE) {
 		sdiohal_err("%s write size > %d\n",
@@ -858,9 +850,6 @@ static ssize_t at_cmd_write(struct file *filp,
 
 	/* read cp2 register by direct mode: "readreg 0x40844220" */
 	if (strncmp(cmd_buf + PUB_HEAD_RSV, "readreg 0x", 10) == 0) {
-		long int reg_addr_read;
-		unsigned int reg_addr, reg_val;
-
 		cmd_buf[SDIOHAL_WRITE_SIZE + PUB_HEAD_RSV - 1] = 0;
 		ret = kstrtol(&cmd_buf[PUB_HEAD_RSV + sizeof("readreg 0x") - 1],
 			      16, &reg_addr_read);
@@ -1058,9 +1047,6 @@ static ssize_t at_cmd_write(struct file *filp,
 	}
 
 	if (strncmp(cmd_buf + PUB_HEAD_RSV, "sdio_int", 8) == 0) {
-		unsigned long int int_bitmap;
-		unsigned int addr=0;
-
 		if (strncmp(cmd_buf + PUB_HEAD_RSV, "sdio_int_rx", 11) == 0)
 			sdiohal_test_int_init(SDIOHAL_INT_PWR_FUNC);
 		else if (strncmp(cmd_buf + PUB_HEAD_RSV,
@@ -1078,9 +1064,6 @@ static ssize_t at_cmd_write(struct file *filp,
 
 			if (int_bitmap & 0xff00)
 				addr = REG_TO_CP0_REQ1;
-
-
-			
 			sprdwcn_bus_aon_writeb(addr, int_bitmap >> 8);
 		}
 
@@ -1133,7 +1116,7 @@ static ssize_t at_cmd_write(struct file *filp,
 			__func__, tp_tx_buf_cnt, tp_tx_buf_len);
 		tp_tx_flag = 1;
 		tp_tx_cnt = 0;
-		do_gettimeofday(&tp_tx_start_time);
+		getnstimeofday(&tp_tx_start_time);
 		if ((tp_tx_buf_cnt <= TP_TX_BUF_CNT) &&
 			(tp_tx_buf_len <= TP_TX_BUF_LEN)) {
 			sprdwcn_bus_chn_deinit(&at_tx_ops);

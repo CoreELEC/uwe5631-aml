@@ -26,6 +26,7 @@
 
 /* cmd handler*/
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 int sprdwl_vendor_nan_cmds(struct wiphy *wiphy,
 			   struct wireless_dev *wdev,
 			   const void  *data, int len)
@@ -84,3 +85,4 @@ int sprdwl_event_nan(struct sprdwl_vif *vif, u8 *data, u16 len)
 
 	return 0;
 }
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */

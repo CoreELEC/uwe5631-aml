@@ -35,7 +35,6 @@
 #include <linux/dcache.h>
 #include <linux/udp.h>
 #include <linux/version.h>
-#include "wcn_wrapper.h"
 
 #include "cfg80211.h"
 #include "cmdevt.h"
@@ -71,6 +70,20 @@
 #define FOUR_BYTES_ALIGN_OFFSET 3
 #endif
 
+#define	SPRDWL_WAKE_HOST		1
+#define	SPRDWL_NO_WAKE_HOST		2
+struct sprdwl_suspend_resume_connect {
+	struct cfg80211_connect_params connect_params;
+	struct ieee80211_channel channel;
+	struct ieee80211_channel channel_hint;
+	u8 ie[100];
+	u8 key[WLAN_MAX_KEY_LEN];
+	u8 bssid[ETH_ALEN];
+	u8 bssid_hint[ETH_ALEN];
+	u8 ssid[IEEE80211_MAX_SSID_LEN];
+	bool reconnect_flag;
+};
+
 struct sprdwl_mc_filter {
 	bool mc_change;
 	u8 subtype;
@@ -88,6 +101,12 @@ struct scan_result {
 	struct list_head list;
 	int signal;
 	unsigned char bssid[6];
+};
+
+struct sprdwl_throughtput {
+	u64 bytes;
+	u32 sec;
+	u32 throughtput;
 };
 
 struct sprdwl_vif {
@@ -138,13 +157,12 @@ struct sprdwl_vif {
 	struct cfg80211_chan_def dfs_chandef;
 #endif
 	u8 wps_flag;
-#ifdef SYNC_DISCONNECT
-	atomic_t sync_disconnect_event;
-	u16 disconnect_event_code;
-	wait_queue_head_t disconnect_wq;
-#endif
+	struct completion disconnect_completed;
 	bool has_rand_mac;
 	u8 random_mac[ETH_ALEN];
+	struct sprdwl_throughtput throughtput_tx;
+	struct sprdwl_throughtput throughtput_rx;
+	struct sprdwl_suspend_resume_connect suspend_resume_connect;
 };
 
 enum sprdwl_hw_type {
@@ -344,6 +362,12 @@ extern struct device *sprdwl_dev;
 		} \
 	} while (0)
 
+#define wl_trace(fmt, args...) \
+	do { \
+		if (sprdwl_debug_level >= L_ERR) \
+			trace_printk("sprdwl:" fmt, ##args); \
+	} while (0)
+
 #define wl_err_ratelimited(fmt, args...) \
 	do { \
 		if (sprdwl_debug_level >= L_ERR) \
@@ -362,12 +386,6 @@ extern struct device *sprdwl_dev;
 		if (sprdwl_debug_level >= level) { \
 			print_hex_dump(KERN_ERR, _str, _type, _row, _gp, _buf, _len, _ascii); \
 		} \
-	} while (0)
-
-#define wl_err_ratelimited(fmt, args...) \
-	do { \
-		if (sprdwl_debug_level >= L_ERR) \
-			printk_ratelimited("sprdwl:" fmt, ##args); \
 	} while (0)
 
 #ifdef ACS_SUPPORT

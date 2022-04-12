@@ -34,7 +34,7 @@
 #include "sdiohal.h"
 #include "wcn_glb.h"
 
-#ifdef CONFIG_HISI_BOARD
+#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
 #include "mach/hardware.h"
 #endif
 
@@ -72,7 +72,10 @@ extern int sunxi_wlan_get_oob_irq_flags(void);
 #define IS_BYPASS_WAKE(addr) (false)
 #endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 18, 20)
 extern void mmc_power_up(struct mmc_host *host, u32 ocr);
+extern void mmc_power_off(struct mmc_host *host);
+#endif
 
 static int (*scan_card_notify)(void);
 struct sdiohal_data_t *sdiohal_data;
@@ -102,6 +105,14 @@ static void sdiohal_card_unlock(struct sdiohal_data_t *p_data)
 struct sdiohal_data_t *sdiohal_get_data(void)
 {
 	return sdiohal_data;
+}
+
+unsigned char sdiohal_get_wl_wake_host_en(void)
+{
+	if(marlin_get_bt_wl_wake_host_en() & BIT(WL_WAKE_HOST))
+		return WL_WAKE_HOST;
+	else
+		return WL_NO_WAKE_HOST;
 }
 
 unsigned char sdiohal_get_tx_mode(void)
@@ -241,6 +252,9 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 	static long time_total_ns;
 	static int times_count;
 
+	ktime_t kt;
+	u32 sec;
+
 	getnstimeofday(&tm_begin);
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -254,6 +268,21 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 
 	if (sdiohal_card_lock(p_data, __func__))
 		return -1;
+
+	kt = ktime_get();
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	sec = (u32)(div_u64(kt, NSEC_PER_SEC));
+#else/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
+	sec = (u32)(div_u64(kt.tv64, NSEC_PER_SEC));
+#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
+	p_data->throughtput_tx.bytes += datalen;
+	if (p_data->throughtput_tx.sec != sec) {
+		p_data->throughtput_tx.throughtput = (p_data->throughtput_tx.bytes * 8) >> 10;
+		p_data->throughtput_tx.sec = sec;
+		p_data->throughtput_tx.bytes = 0;
+		sdiohal_pr_perf("tp_tx: %d Kbps\n", p_data->throughtput_tx.throughtput);
+	}
+
 
 	sdiohal_resume_check();
 	sdiohal_op_enter();
@@ -339,6 +368,9 @@ static int sdiohal_config_packer_chain(struct sdiohal_list_t *data_list,
 	unsigned int i, ttl_len = 0, node_num;
 	int err_ret = 0;
 
+	ktime_t kt;
+	u32 sec;
+
 	node_num = data_list->node_num;
 	if (node_num > MAX_CHAIN_NODE_NUM)
 		node_num = MAX_CHAIN_NODE_NUM;
@@ -414,6 +446,22 @@ static int sdiohal_config_packer_chain(struct sdiohal_list_t *data_list,
 	}
 
 	sdiohal_debug("ttl len:%d sg_count:%d\n", ttl_len, sg_count);
+
+	if (dir == SDIOHAL_WRITE) {
+		kt = ktime_get();
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+		sec = (u32)(div_u64(kt, NSEC_PER_SEC));
+#else/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
+		sec = (u32)(div_u64(kt.tv64, NSEC_PER_SEC));
+#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
+		p_data->throughtput_tx.bytes += ttl_len;
+		if (p_data->throughtput_tx.sec != sec) {
+			p_data->throughtput_tx.throughtput = (p_data->throughtput_tx.bytes * 8) >> 10;
+			p_data->throughtput_tx.sec = sec;
+			p_data->throughtput_tx.bytes = 0;
+			sdiohal_pr_perf("tp_tx: %d Kbps\n", p_data->throughtput_tx.throughtput);
+		}
+	}
 
 	blk_num = ttl_len / blk_size;
 	mmc_dat.sg = p_data->sg_list;
@@ -1581,7 +1629,6 @@ static int sdiohal_suspend(struct device *dev)
 	}
 
 #ifdef CONFIG_WCN_SLP
-	slp_mgr_drv_sleep(SUBSYS_MAX, true);
 	sdio_wait_pub_int_done();
 	sdio_record_power_notify(false);
 #endif
@@ -1640,7 +1687,7 @@ static int sdiohal_resume(struct device *dev)
 #if KERNEL_VERSION(4, 18, 20) >= LINUX_VERSION_CODE
 	mmc_power_save_host(p_data->sdio_dev_host);
 #else
-	mmc_power_off(p_data->sdio_dev_host, p_data->sdio_dev_host->card->ocr);
+	mmc_power_off(p_data->sdio_dev_host);
 #endif
 	mdelay(5);
 #if KERNEL_VERSION(4, 18, 20) >= LINUX_VERSION_CODE
@@ -1743,8 +1790,6 @@ static int sdiohal_resume(struct device *dev)
 		(p_data->irq_num > 0))
 		enable_irq(p_data->irq_num);
 #endif
-
-	slp_mgr_wakeup(SUBSYS_MAX);
 
 	for (chn = 0; chn < SDIO_CHANNEL_NUM; chn++) {
 		sdiohal_ops = chn_ops(chn);
@@ -1933,7 +1978,7 @@ void sdiohal_reset(bool full_reset)
 }
 #endif
 
-#ifdef CONFIG_HISI_BOARD
+#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
 #define REG_BASE_CTRL __io_address(0xf8a20008)
 void sdiohal_set_card_present(bool enable)
 {
@@ -1990,10 +2035,10 @@ static int sdiohal_probe(struct sdio_func *func,
 		return -1;
 	}
 	sdiohal_debug("get host ok!!!");
-#ifdef CONFIG_HISI_BOARD
+#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
 /**
  * max_blk_count default is 256
- * MAX_CHAIN_NODE_NUM * MAX_MBUF_SIZE / (CONFIG_SDIO_BLKSIZE) 
+ * MAX_CHAIN_NODE_NUM * MAX_MBUF_SIZE / (CONFIG_SDIO_BLKSIZE)
  * should max than max_blk_count
 */
 		p_data->sdio_dev_host->max_blk_count = 512;
@@ -2070,7 +2115,7 @@ static void sdiohal_remove(struct sdio_func *func)
 
 	sdiohal_info("[%s]enter\n", __func__);
 
-#ifdef CONFIG_HISI_BOARD
+#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
 	sdiohal_set_card_present(0);
 #endif
 
@@ -2175,7 +2220,7 @@ void sdiohal_remove_card(void)
 
 	init_completion(&p_data->remove_done);
 
-#ifdef CONFIG_HISI_BOARD
+#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
 	sdiohal_set_card_present(0);
 #endif
 
@@ -2273,8 +2318,8 @@ int sdiohal_scan_card(void)
 		msleep(100);
 	}
 
-#ifdef CONFIG_HISI_BOARD
-	/* only for hisi mv300 scan card mechanism */
+#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
+	/* only for hisi mv300 or goke scan card mechanism */
 	sdiohal_set_card_present(1);
 #endif
 

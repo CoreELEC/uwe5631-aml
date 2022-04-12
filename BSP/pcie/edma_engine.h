@@ -296,7 +296,7 @@ struct event_t {
 	int id;
 	int flag;
 	struct semaphore wait_sem;
-	struct timeval time;
+	struct timespec time;
 	struct tasklet_struct *tasklet;
 };
 

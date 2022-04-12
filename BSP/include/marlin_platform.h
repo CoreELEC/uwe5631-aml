@@ -79,7 +79,8 @@ enum marlin_ant_num {
 
 enum marlin_wake_host_en {
 	BT_WAKE_HOST = 0,
-	WL_WAKE_HOST
+	WL_WAKE_HOST,
+	WL_NO_WAKE_HOST
 };
 
 enum marlin_cp2_status {

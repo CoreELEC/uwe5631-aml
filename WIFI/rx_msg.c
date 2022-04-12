@@ -442,13 +442,13 @@ int sprdwl_pkt_log_save(struct sprdwl_intf *intf, void *data)
 		}
 		vfs_write(intf->pfile, temphdr, 6, &intf->lp);
 		vfs_write(intf->pfile, &temp_space, 1, &intf->lp);
-		memset(tempdata, 0x00, 2);
+		memset(tempdata, 0x00, 3);
 		for (i = 0; i < data_len; i++) {
 				sprintf(tempdata, "%02x",
 						*(unsigned char *)data);
 				vfs_write(intf->pfile, tempdata,
 						  2, &intf->lp);
-				memset(tempdata, 0x00, 2);
+				memset(tempdata, 0x00, 3);
 				if ((i != 0) && ((i + 1)%16 == 0)) {
 					if (i < (data_len - 1)) {
 						vfs_write(intf->pfile, &temp_enter,

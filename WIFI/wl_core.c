@@ -579,9 +579,11 @@ static struct sprdwl_if_ops sprdwl_core_ops = {
 	.ini_download_status = sprdwl_ini_download_status
 };
 
+#ifdef CPUFREQ_UPDATE_SUPPORT
 static struct notifier_block boost_notifier = {
 	.notifier_call = sprdwl_notifier_boost,
 };
+#endif /* CPUFREQ_UPDATE_SUPPORT */
 
 #ifdef CP2_RESET_SUPPORT
 extern struct sprdwl_priv *g_sprdwl_priv;
@@ -634,7 +636,9 @@ static void wifi_reset_wq(struct work_struct *work) {
 		}
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 	sprdwl_vendor_deinit(g_sprdwl_priv->wiphy);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
 	sprdwl_cmd_wake_upall();
 	sprdwl_tcp_ack_deinit(g_sprdwl_priv);
 	sprdwl_intf_deinit(intf);
@@ -668,7 +672,9 @@ static void wifi_resume_wq(struct work_struct *work) {
 	sprdwl_tcp_ack_init(g_sprdwl_priv);
 	sprdwl_get_fw_info(g_sprdwl_priv);
 	sprdwl_setup_wiphy(g_sprdwl_priv->wiphy, g_sprdwl_priv);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 	sprdwl_vendor_init(g_sprdwl_priv->wiphy);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
 
 	sprdwl_reg_notify(g_sprdwl_priv->wiphy, &g_sprdwl_priv->sync.request);
 
@@ -809,7 +815,10 @@ static int sprdwl_probe(struct platform_device *pdev)
 #endif
 
 	sprdwl_debugfs_init(intf);
+
+#ifdef CPUFREQ_UPDATE_SUPPORT
 	cpufreq_register_notifier(&boost_notifier, CPUFREQ_POLICY_NOTIFIER);
+#endif /* CPUFREQ_UPDATE_SUPPORT */
 
 	return ret;
 
@@ -837,7 +846,10 @@ static int sprdwl_remove(struct platform_device *pdev)
 	marlin_reset_callback_unregister(MARLIN_WIFI, &wifi_reset_notifier);
 #endif
 
+#ifdef CPUFREQ_UPDATE_SUPPORT
 	cpufreq_unregister_notifier(&boost_notifier, CPUFREQ_POLICY_NOTIFIER);
+#endif /* CPUFREQ_UPDATE_SUPPORT */
+
 	sprdwl_debugfs_deinit();
 	sprdwl_core_deinit(priv);
 	sprdwl_bus_deinit();
