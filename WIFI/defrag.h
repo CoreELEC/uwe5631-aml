@@ -32,6 +32,4 @@ struct sk_buff
 *defrag_data_process(struct sprdwl_rx_defrag_entry *defrag_entry,
 		     struct sk_buff *pskb);
 
-void sprdwl_defrag_recover(struct sprdwl_rx_defrag_entry *defrag_entry, unsigned char lut);
-
 #endif /*__DEFRAG__H__*/

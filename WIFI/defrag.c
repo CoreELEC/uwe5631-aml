@@ -232,20 +232,6 @@ struct sk_buff
 	return skb;
 }
 
-void sprdwl_defrag_recover(struct sprdwl_rx_defrag_entry *defrag_entry, unsigned char lut)
-{
-	struct rx_defrag_node *node = NULL, *pos_node = NULL;
-
-	list_for_each_entry_safe(node, pos_node, &defrag_entry->list, list) {
-		if ((lut == node->desc.sta_lut_index) && (!skb_queue_empty(&node->skb_list))) {
-			skb_queue_purge(&node->skb_list);
-			wl_info("%s:defrag clear cache\n", __func__);
-		}
-		wl_info("%s:msdu len %d\n", __func__, node->msdu_len);
-	}
-
-}
-
 int sprdwl_defrag_init(struct sprdwl_rx_defrag_entry *defrag_entry)
 {
 	int i = 0;

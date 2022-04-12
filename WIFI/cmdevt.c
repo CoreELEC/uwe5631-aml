@@ -664,8 +664,7 @@ int sprdwl_cmd_send_recv(struct sprdwl_priv *priv,
 			intf = (struct sprdwl_intf *)(vif->priv->hw_priv);
 			tx_msg = (struct sprdwl_tx_msg *)intf->sprdwl_tx;
 			if (intf->cp_asserted == 0 &&
-				tx_msg->hang_recovery_status == HANG_RECOVERY_END &&
-				!intf->exit)
+				tx_msg->hang_recovery_status == HANG_RECOVERY_END)
 				sprdwl_send_assert_cmd(vif, cmd_id, CMD_RSP_TIMEOUT_ERROR);
 			sprdwl_put_vif(vif);
 		}
@@ -3415,24 +3414,18 @@ void sprdwl_event_chan_changed(struct sprdwl_vif *vif, u8 *data, u16 len)
 		wl_err("%s, unknowed event!\n", __func__);
 	} else if (p->initiator == 1) {
 		channel = p->target_channel;
-
-		if (channel > 14)
-			freq = 5000 + channel*5;
-		else
-			freq = 2412 + (channel-1)*5;
-
+		freq = 2412 + (channel-1) * 5;
 		if (wiphy)
 			ch = ieee80211_get_channel(wiphy, freq);
 		else
 			wl_err("%s, wiphy is null!\n", __func__);
-
-		if (ch) {
+		if (ch)
 			/* we will be active on the channel */
 			cfg80211_chandef_create(&chandef, ch,
 						NL80211_CHAN_HT20);
-			cfg80211_ch_switch_notify(vif->ndev, &chandef);
-		} else
+		else
 			wl_err("%s, ch is null!\n", __func__);
+		cfg80211_ch_switch_notify(vif->ndev, &chandef);
 	}
 }
 

@@ -3648,6 +3648,7 @@ static int sprdwl_set_offload_packet(struct wiphy *wiphy,
 }
 
 const struct wiphy_vendor_command sprdwl_vendor_cmd[] = {
+
 	{/*9*/
 		{
 		    .vendor_id = OUI_SPREAD,

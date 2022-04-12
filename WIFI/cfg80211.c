@@ -29,7 +29,6 @@
 #include "work.h"
 #include "ibss.h"
 #include "intf_ops.h"
-#include "defrag.h"
 #include "dbg_ini_util.h"
 #include "tx_msg.h"
 #ifdef RND_MAC_SUPPORT
@@ -776,14 +775,6 @@ static int sprdwl_cfg80211_set_rekey(struct wiphy *wiphy,
 					struct cfg80211_gtk_rekey_data *data)
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
-	struct sprdwl_intf *intf;
-	struct sprdwl_rx_if *rx_if;
-	unsigned char lut_index;
-
-	intf = (struct sprdwl_intf *)(vif->priv->hw_priv);
-	rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
-	lut_index = sprdwl_find_lut_index(intf, vif);
-	sprdwl_defrag_recover(&(rx_if->defrag_entry), lut_index);
 
 	wl_info("%s:enter:\n", __func__);
 	return sprdwl_set_rekey_data(vif->priv, vif->ctx_id, data);
@@ -2518,10 +2509,6 @@ err:
 
 void sprdwl_report_disconnection(struct sprdwl_vif *vif, u16 reason_code)
 {
-	struct sprdwl_intf *intf;
-	struct sprdwl_rx_if *rx_if;
-	unsigned char lut_index;
-
 	if (vif->sm_state == SPRDWL_CONNECTING) {
 		cfg80211_connect_result(vif->ndev, vif->bssid, NULL, 0, NULL, 0,
 					WLAN_STATUS_UNSPECIFIED_FAILURE,
@@ -2541,11 +2528,6 @@ void sprdwl_report_disconnection(struct sprdwl_vif *vif, u16 reason_code)
 		wl_ndev_log(L_ERR, vif->ndev, "%s Unexpected event!\n", __func__);
 		return;
 	}
-
-	intf = (struct sprdwl_intf *)(vif->priv->hw_priv);
-	rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
-	lut_index = sprdwl_find_lut_index(intf, vif);
-	sprdwl_defrag_recover(&(rx_if->defrag_entry), lut_index);
 
 	vif->sm_state = SPRDWL_DISCONNECTED;
 
