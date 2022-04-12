@@ -17,7 +17,6 @@
 
 #ifndef __WL_CORE_H__
 #define __WL_CORE_H__
-#include "wcn_wrapper.h"
 #include <linux/types.h>
 #include <linux/wait.h>
 #include <linux/spinlock.h>
@@ -182,9 +181,9 @@ struct sprdwl_intf {
 
 	int fw_power_down;
 	int fw_awake;
-#ifdef UNISOC_WIFI_PS
+	/*don't send cmd after suspend*/
 	struct completion suspend_completed;
-#endif
+
 	/*for pkt log function*/
 	loff_t lp;
 	struct file *pfile;
@@ -195,7 +194,11 @@ struct sprdwl_intf {
 	struct dbg_ini_cfg ini_cfg;
 	/*wifi bt coex mode, 1:BT is on, 0:BT is off*/
 	u8 coex_bt_on;
+
+#ifdef CPUFREQ_UPDATE_SUPPORT
 	u8 boost;
+#endif /* CPUFREQ_UPDATE_SUPPORT */
+
 	unsigned int txnum_level;
 	unsigned int rxnum_level;
 	/*tcpack*/

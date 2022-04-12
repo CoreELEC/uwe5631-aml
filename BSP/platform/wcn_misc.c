@@ -18,7 +18,6 @@
 #include <linux/mutex.h>
 #include <linux/version.h>
 #include <linux/time.h>
-#include <wcn_wrapper.h>
 #if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
 #include <linux/sched/clock.h>
 #endif
@@ -102,10 +101,11 @@ long int mdbg_send_atcmd(char *buf, long int len, enum atcmd_owner owner)
 
 /* copy from function: kdb_gmtime */
 #if KERNEL_VERSION(4, 20, 0) <= LINUX_VERSION_CODE
-static void wcn_gmtime(struct timespec64 *tv, struct wcn_tm *tm){
+static void wcn_gmtime(struct timespec64 *tv, struct wcn_tm *tm)
 #else
-static void wcn_gmtime(struct timespec *tv, struct wcn_tm *tm){
+static void wcn_gmtime(struct timespec *tv, struct wcn_tm *tm)
 #endif
+{
 	/* This will work from 1970-2099, 2100 is not a leap year */
 	static int mon_day[] = { 31, 29, 31, 30, 31, 30, 31,
 				 31, 30, 31, 30, 31 };

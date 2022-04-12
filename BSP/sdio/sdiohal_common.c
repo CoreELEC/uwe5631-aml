@@ -313,9 +313,8 @@ void sdiohal_spinlock_init(void)
 	spin_lock_init(&p_data->tx_spinlock);
 	spin_lock_init(&p_data->rx_spinlock);
 }
-
 /* for sleep */
-#ifdef CONFIG_WCN_SLP
+#if (defined CONFIG_WCN_SLP) && (!defined CONFIG_WCN_TXRX_NSLP)
 void sdiohal_cp_tx_sleep(enum slp_subsys subsys)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();

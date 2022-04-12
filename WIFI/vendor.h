@@ -961,8 +961,6 @@ enum sprdwl_vendor_attr_sar_limits {
 		WLAN_ATTR_SAR_LIMITS_AFTER_LAST - 1
 };
 /*end of SAR limit---CMD ID:146*/
-int sprdwl_vendor_init(struct wiphy *wiphy);
-int sprdwl_vendor_deinit(struct wiphy *wiphy);
 
 #define MAX_CHANNELS 16
 #define MAX_BUCKETS 4
@@ -1660,6 +1658,9 @@ enum sprdwl_attr_offloaded_packets {
 	OFFLOADED_PACKETS_AFTER_LAST - 1,
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+int sprdwl_vendor_init(struct wiphy *wiphy);
+int sprdwl_vendor_deinit(struct wiphy *wiphy);
 void sprdwl_report_gscan_result(struct sprdwl_vif *vif,
 				u32 report_event, u8 bucketid,
 				u16 chan, s16 rssi, const u8 *buf, u16 len);
@@ -1680,5 +1681,6 @@ int sprdwl_vendor_cache_significant_change_result(struct sprdwl_vif *vif,
 int sprdwl_set_packet_offload(struct sprdwl_priv *priv, u8 vif_ctx_id,
 			      u32 req, u8 enable, u32 interval,
 			      u32 len, u8 *data);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
 
 #endif

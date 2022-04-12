@@ -29,10 +29,10 @@ static struct edma_info g_edma = { 0 };
 static unsigned char *mpool_buffer;
 static struct dma_buf mpool_dm = {0};
 
-int time_sub_us(struct timeval *start, struct timeval *end)
+int time_sub_us(struct timespec *start, struct timespec *end)
 {
 	return (end->tv_sec - start->tv_sec)*1000000 +
-		(end->tv_usec - start->tv_usec);
+		div_u64((end->tv_nsec - start->tv_nsec), 1000);
 }
 
 void *mpool_vir_to_phy(void *p)
@@ -99,9 +99,9 @@ static int wait_wcnevent(struct event_t *event, int timeout)
 {
 	if (timeout < 0) {
 		int dt;
-		struct timeval time;
+		struct timespec time;
 
-		do_gettimeofday(&time);
+		getnstimeofday(&time);
 		if (event->wait_sem.count == 0) {
 			if (event->flag == 0) {
 				event->flag = 1;
@@ -1381,10 +1381,10 @@ int edma_tp_count(int chn, void *head, void *tail, int num)
 	int i, dt;
 	struct mbuf_t *mbuf;
 	static int bytecount;
-	static struct timeval start_time, time;
+	static struct timespec start_time, time;
 
 	for (i = 0, mbuf = (struct mbuf_t *)head; i < num; i++) {
-		do_gettimeofday(&time);
+		getnstimeofday(&time);
 		if (bytecount == 0)
 			start_time = time;
 		bytecount += mbuf->len;

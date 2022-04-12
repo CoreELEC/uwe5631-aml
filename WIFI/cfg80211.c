@@ -29,6 +29,7 @@
 #include "work.h"
 #include "ibss.h"
 #include "intf_ops.h"
+#include "defrag.h"
 #include "dbg_ini_util.h"
 #include "tx_msg.h"
 #ifdef RND_MAC_SUPPORT
@@ -775,6 +776,14 @@ static int sprdwl_cfg80211_set_rekey(struct wiphy *wiphy,
 					struct cfg80211_gtk_rekey_data *data)
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
+	struct sprdwl_intf *intf;
+	struct sprdwl_rx_if *rx_if;
+	unsigned char lut_index;
+
+	intf = (struct sprdwl_intf *)(vif->priv->hw_priv);
+	rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
+	lut_index = sprdwl_find_lut_index(intf, vif);
+	sprdwl_defrag_recover(&(rx_if->defrag_entry), lut_index);
 
 	wl_info("%s:enter:\n", __func__);
 	return sprdwl_set_rekey_data(vif->priv, vif->ctx_id, data);
@@ -831,6 +840,17 @@ static int sprdwl_cfg80211_start_ap(struct wiphy *wiphy,
 	u16 chn = 0;
 	u8 *head, *tail;
 	int head_len, tail_len;
+#ifdef STA_SOFTAP_SCC_MODE
+	struct sprdwl_vif *vif_temp;
+
+	vif_temp = mode_to_vif(vif->priv, SPRDWL_MODE_P2P_DEVICE);
+	if(vif_temp && (vif->priv->fw_stat[vif_temp->mode] != SPRDWL_INTF_CLOSE)){
+		sprdwl_uninit_fw(vif_temp);
+		vif_temp->mode = SPRDWL_MODE_P2P_DEVICE;
+	}
+	sprdwl_put_vif(vif_temp);
+	sprdwl_init_fw(vif);
+#endif
 
 	wl_ndev_log(L_DBG, ndev, "%s\n", __func__);
 
@@ -986,15 +1006,29 @@ static int sprdwl_cfg80211_change_beacon(struct wiphy *wiphy,
 
 static int sprdwl_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev)
 {
-#ifdef DFS_MASTER
+#if defined(DFS_MASTER) || defined(STA_SOFTAP_SCC_MODE)
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 #endif
+#ifdef STA_SOFTAP_SCC_MODE
+	struct sprdwl_vif *vif_temp;
+#endif
+
 	wl_ndev_log(L_DBG, ndev, "%s\n", __func__);
 #ifdef DFS_MASTER
 	sprdwl_abort_cac(vif);
 #endif
 
 	netif_carrier_off(ndev);
+
+#ifdef STA_SOFTAP_SCC_MODE
+	sprdwl_uninit_fw(vif);
+	vif_temp = mode_to_vif(vif->priv, SPRDWL_MODE_P2P_DEVICE);
+	if(vif_temp && (vif->priv->fw_stat[vif_temp->mode] != SPRDWL_INTF_OPEN)){
+		vif_temp->mode = SPRDWL_MODE_NONE;
+		sprdwl_init_fw(vif_temp);
+	}
+	sprdwl_put_vif(vif_temp);
+#endif
 	return 0;
 }
 
@@ -1718,53 +1752,13 @@ static int sprdwl_cfg80211_sched_scan_stop(struct wiphy *wiphy,
 	return ret;
 }
 
-#ifdef SYNC_DISCONNECT
-void sprdwl_disconnect_handle(struct sprdwl_vif *vif)
-{
-	u16 reason_code = 0;
-	if ((vif->sm_state == SPRDWL_CONNECTED) ||
-			(vif->sm_state == SPRDWL_DISCONNECTING)) {
-		cfg80211_disconnected(vif->ndev, reason_code,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 83)
-			NULL, 0, true, GFP_KERNEL);
-#else
-			NULL, 0, GFP_KERNEL);
-#endif
-		wl_ndev_log(L_DBG, vif->ndev,
-			"%s %s, reason_code %d\n", __func__,
-			vif->ssid, reason_code);
-	}
-
-	vif->sm_state = SPRDWL_DISCONNECTED;
-
-	/* Clear bssid & ssid */
-	memset(vif->bssid, 0, sizeof(vif->bssid));
-	memset(vif->ssid, 0, sizeof(vif->ssid));
-#ifdef WMMAC_WFA_CERTIFICATION
-	reset_wmmac_parameters(vif->priv);
-	reset_wmmac_ts_info();
-	init_default_qos_map();
-#endif
-	/* Stop netif */
-	if (netif_carrier_ok(vif->ndev)) {
-		netif_carrier_off(vif->ndev);
-		netif_stop_queue(vif->ndev);
-	}
-
-	/*clear link layer status data*/
-	memset(&vif->priv->pre_radio, 0, sizeof(vif->priv->pre_radio));
-}
-#endif
-static int sprdwl_cfg80211_disconnect(struct wiphy *wiphy,
+int sprdwl_cfg80211_disconnect(struct wiphy *wiphy,
 				      struct net_device *ndev, u16 reason_code)
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 	enum sm_state old_state = vif->sm_state;
 	int ret;
-#ifdef SYNC_DISCONNECT
-	u32 msec;
-	ktime_t kt;
-#endif
+
 #ifdef STA_SOFTAP_SCC_MODE
 	struct sprdwl_intf *intf = (struct sprdwl_intf *)vif->priv->hw_priv;
 	intf->sta_home_channel = 0;
@@ -1775,35 +1769,73 @@ static int sprdwl_cfg80211_disconnect(struct wiphy *wiphy,
 
 	vif->sm_state = SPRDWL_DISCONNECTING;
 
-#ifdef SYNC_DISCONNECT
-	atomic_set(&vif->sync_disconnect_event, 1);
-#endif
 	ret = sprdwl_disconnect(vif->priv, vif->ctx_id, reason_code);
 	if (ret) {
 		vif->sm_state = old_state;
 		goto out;
 	}
-#ifdef SYNC_DISCONNECT
+
 	if (!sprdwl_sync_disconnect_event(vif, msecs_to_jiffies(1000))) {
-		kt = ktime_get();
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-		msec = (u32)(div_u64(kt, NSEC_PER_MSEC));
-#else
-		msec = (u32)(div_u64(kt.tv64, NSEC_PER_MSEC));
-#endif
-		wl_err("Wait disconnect event timeout. [mstime = %d]\n",
-		       cpu_to_le32(msec));
-	} else {
-		sprdwl_disconnect_handle(vif);
+		wl_err("Wait disconnect event timeout. \n");
 	}
-	atomic_set(&vif->sync_disconnect_event, 0);
-#endif
+
 	trace_deauth_reason(vif->mode, reason_code, LOCAL_EVENT);
 out:
 	return ret;
 }
 
-static int sprdwl_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
+void sprdwl_set_suspend_resume_connect_params(struct cfg80211_connect_params *sme,
+		struct sprdwl_suspend_resume_connect *con)
+{
+	memset(&con->connect_params, 0, sizeof(con->connect_params));
+	memcpy(&con->connect_params, sme, sizeof(con->connect_params));
+
+	if (sme->ie_len > 0) {
+		memset(con->ie, 0, sizeof(con->ie));
+		memcpy(con->ie, sme->ie, sme->ie_len);
+		con->connect_params.ie = con->ie;
+	}
+
+	if (sme->key_len) {
+		memset(con->key, 0, sizeof(con->key));
+		memcpy(con->key, sme->key, sme->key_len);
+		con->connect_params.key = con->key;
+	}
+
+	if (!sme->channel) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	if (sme->channel_hint) {
+		memset(&con->channel_hint, 0, sizeof(con->channel_hint));
+		memcpy(&con->channel_hint, sme->channel_hint, sizeof(con->channel_hint));
+		con->connect_params.channel_hint = &con->channel_hint;
+	}
+#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)*/
+	} else {
+		memset(&con->channel, 0, sizeof(con->channel));
+		memcpy(&con->channel, sme->channel, sizeof(con->channel));
+		con->connect_params.channel = &con->channel;
+	}
+
+	if (sme->bssid != NULL) {
+		memset(con->bssid, 0, sizeof(con->bssid));
+		memcpy(con->bssid, sme->bssid, sizeof(con->bssid));
+		con->connect_params.bssid = con->bssid;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	} else if (sme->bssid_hint != NULL) {
+		memset(con->bssid_hint, 0, sizeof(con->bssid_hint));
+		memcpy(con->bssid_hint, sme->bssid_hint, sizeof(con->bssid_hint));
+		con->connect_params.bssid_hint = con->bssid_hint;
+#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)*/
+	}
+
+	if (sme->ssid != NULL) {
+		memset(con->ssid, 0, sizeof(con->ssid));
+		memcpy(con->ssid, sme->ssid, sme->ssid_len);
+		con->connect_params.ssid = con->ssid;
+	}
+}
+
+int sprdwl_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 				   struct cfg80211_connect_params *sme)
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
@@ -2020,6 +2052,10 @@ static int sprdwl_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 		strncpy(vif->ssid, sme->ssid, sme->ssid_len);
 		vif->ssid_len = sme->ssid_len;
 		wl_ndev_log(L_DBG, ndev, "%s %s\n", __func__, vif->ssid);
+
+		if (vif->suspend_resume_connect.reconnect_flag == false) {
+			sprdwl_set_suspend_resume_connect_params(sme, &vif->suspend_resume_connect);
+		}
 	}
 
 	return 0;
@@ -2509,15 +2545,30 @@ err:
 
 void sprdwl_report_disconnection(struct sprdwl_vif *vif, u16 reason_code)
 {
-	if (vif->sm_state == SPRDWL_CONNECTING) {
+	struct sprdwl_intf *intf;
+	struct sprdwl_rx_if *rx_if;
+	unsigned char lut_index;
+
+	if (vif->suspend_resume_connect.reconnect_flag == true) {
+		wl_info("%s suspend resume connect\n", __func__);
+	} else if (vif->sm_state == SPRDWL_CONNECTING) {
 		cfg80211_connect_result(vif->ndev, vif->bssid, NULL, 0, NULL, 0,
 					WLAN_STATUS_UNSPECIFIED_FAILURE,
 					GFP_KERNEL);
-	} else if ((vif->sm_state == SPRDWL_CONNECTED) ||
-			(vif->sm_state == SPRDWL_DISCONNECTING)) {
+	} else if (vif->sm_state == SPRDWL_CONNECTED) {
 		cfg80211_disconnected(vif->ndev, reason_code,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 83)
 				NULL, 0, false, GFP_KERNEL);
+#else
+				      NULL, 0, GFP_KERNEL);
+#endif
+		wl_ndev_log(L_DBG, vif->ndev,
+			    "%s %s, reason_code %d\n", __func__,
+			    vif->ssid, reason_code);
+	} else if (vif->sm_state == SPRDWL_DISCONNECTING) {
+		cfg80211_disconnected(vif->ndev, reason_code,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 83)
+				NULL, 0, true, GFP_KERNEL);
 #else
 				      NULL, 0, GFP_KERNEL);
 #endif
@@ -2528,6 +2579,11 @@ void sprdwl_report_disconnection(struct sprdwl_vif *vif, u16 reason_code)
 		wl_ndev_log(L_ERR, vif->ndev, "%s Unexpected event!\n", __func__);
 		return;
 	}
+
+	intf = (struct sprdwl_intf *)(vif->priv->hw_priv);
+	rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
+	lut_index = sprdwl_find_lut_index(intf, vif);
+	sprdwl_defrag_recover(&(rx_if->defrag_entry), lut_index);
 
 	vif->sm_state = SPRDWL_DISCONNECTED;
 
@@ -2865,8 +2921,25 @@ static int sprdwl_cfg80211_start_p2p_device(struct wiphy *wiphy,
 					    struct wireless_dev *wdev)
 {
 	struct sprdwl_vif *vif = container_of(wdev, struct sprdwl_vif, wdev);
+#ifdef STA_SOFTAP_SCC_MODE
+	enum nl80211_iftype type = vif->wdev.iftype;
+	enum sprdwl_mode mode;
+#endif
 
 	wl_ndev_log(L_DBG, vif->ndev, "%s\n", __func__);
+
+#ifdef STA_SOFTAP_SCC_MODE
+	if ((vif->priv->fw_stat[SPRDWL_MODE_AP] == SPRDWL_INTF_OPEN) && (type == NL80211_IFTYPE_P2P_DEVICE)) {
+		mode = type_to_mode(type);
+		if ((mode <= SPRDWL_MODE_NONE) || (mode >= SPRDWL_MODE_MAX)) {
+			wl_ndev_log(L_ERR, vif->ndev, "%s unsupported interface type: %d\n",
+				__func__, type);
+			return -EINVAL;
+		}
+		vif->mode = mode;
+		return 0;
+	}
+#endif
 
 	return sprdwl_init_fw(vif);
 }
@@ -2877,6 +2950,13 @@ static void sprdwl_cfg80211_stop_p2p_device(struct wiphy *wiphy,
 	struct sprdwl_vif *vif = container_of(wdev, struct sprdwl_vif, wdev);
 
 	wl_ndev_log(L_DBG, vif->ndev, "%s\n", __func__);
+
+#ifdef STA_SOFTAP_SCC_MODE
+	if ((vif->priv->fw_stat[vif->mode] == SPRDWL_INTF_CLOSE) && (vif->mode == SPRDWL_MODE_P2P_DEVICE)) {
+		vif->mode = SPRDWL_MODE_NONE;
+		return;
+	}
+#endif
 
 	sprdwl_uninit_fw(vif);
 

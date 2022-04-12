@@ -358,7 +358,8 @@ static void wcn_usb_register_rescan_cb(void *data)
 			(void *)data, dev_plug_fully);
 }
 
-#if (defined CONFIG_USB_EHCI_HCD && defined CONFIG_HISI_BOARD)
+#if ((defined CONFIG_HISI_BOARD || defined CONFIG_GOKE_BOARD) \
+	&& (defined CONFIG_USB_EHCI_HCD))
 #define READ_SIZE PAGE_SIZE
 char ehci_dbg_buf[PAGE_SIZE];
 static int wcn_mount_debugfs(void)
@@ -427,9 +428,10 @@ static void print_ehci_info(void)
 static void wcn_usb_set_carddump_status(unsigned int status)
 {
 	if (status) {
-		#if (defined CONFIG_USB_EHCI_HCD &&  defined CONFIG_HISI_BOARD)
+#if ((defined CONFIG_HISI_BOARD || defined CONFIG_GOKE_BOARD) \
+	&& (defined CONFIG_USB_EHCI_HCD))
 		print_ehci_info();
-		#endif
+#endif
 		wcn_usb_state_sent_event(error_happen);
 	} else
 		wcn_usb_state_sent_event(error_clean);

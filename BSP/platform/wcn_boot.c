@@ -65,6 +65,18 @@ extern void extern_bt_set_enable(int is_on);
 extern void extern_wifi_set_enable(int is_on);
 #endif
 
+#ifdef CONFIG_GOKE_BOARD
+#include "vendor/goke/gk_drv_gpio.h"
+
+/* reset pin connect with gpio4_2 */
+#define RTL_REG_RST_GPIO	(4*8 + 2)
+
+enum gk_GPIO_DIR_E {
+	GK_DIR_OUT = 0,
+	GK_DIR_IN  = 1,
+};
+#endif
+
 #ifdef CONFIG_HISI_BOARD
 #include "vendor/hisilicon/hi_drv_gpio.h"
 
@@ -77,8 +89,11 @@ enum hi_GPIO_DIR_E {
 };
 #endif
 
-#ifdef CONFIG_AW_BOARD
+#if defined(CONFIG_AW_BOARD) || defined(CONFIG_RK_BOARD)
 #include <linux/pm_wakeirq.h>
+#endif
+
+#ifdef CONFIG_AW_BOARD
 extern void sunxi_wlan_set_power(int on);
 extern int sunxi_wlan_get_oob_irq(void);
 extern int sunxi_wlan_get_oob_irq_flags(void);
@@ -110,7 +125,13 @@ static char *wcn_fw_path[WCN_FW_MAX_PATH_NUM] = {
 	"/lib/firmware/",		/* allwinner r328... */
 	"/vendor/firmware/"
 };
+
+#if defined(CONFIG_WCN_SDIO)
 #define WCN_FW_NAME	"wcnmodem.bin"
+#elif defined(CONFIG_WCN_USB)
+#define WCN_FW_NAME	"wcnmodem_usb.bin"
+#endif
+
 #define GNSS_FW_NAME	"gnssmodem.bin"
 
 #ifndef REG_PMU_APB_XTL_WAIT_CNT0
@@ -189,8 +210,8 @@ struct tsx_cali {
  * bit[7:5]: sdio_blk_size: 000: blocksize 840; 001: blocksize 512
  * bit[4]: sdio_rx_mode: 0: adma; 1: sdma
  * bit[3:1]: vendor_id: 000: default id, unisoc[0x0]
- *		       001: hisilicon default version, pull chipen after resume
- *		       010: hisilicon version, keep power (NOT pull chipen) and
+ *		       001: hisilicon/goke default version, pull chipen after resume
+ *		       010: hisilicon/goke version, keep power (NOT pull chipen) and
  *			    reset sdio after resume
  * bit[0]: sdio_config_en: 0: disable sdio config
  *		          1: enable sdio config
@@ -334,8 +355,6 @@ static struct regmap *reg_map;
 #define AFC_CALI_FLAG 0x54463031 /* cali flag */
 #define AFC_CALI_READ_FINISH 0x12121212
 #define WCN_AFC_CALI_PATH "/productinfo/wcn/tsx_bt_data.txt"
-
-//#define BIT(nr) (1UL << (nr))
 
 #ifdef CONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
 #define POWER_WQ_DELAYED_MS 0
@@ -996,6 +1015,7 @@ struct marlin_firmware {
 	size_t size;
 	bool is_from_fs;
 	const void *priv;
+	bool is_from_hex;
 };
 
 /* this function __must__ be paired with marlin_firmware_release !*/
@@ -1020,10 +1040,9 @@ static int marlin_request_firmware(struct marlin_firmware **mfirmware_p)
 	if (!mfirmware)
 		return -ENOMEM;
 
-#ifdef CONFIG_WCN_PARSE_DTS
-	marlin_dev->is_btwf_in_sysfs = 1;
-#endif
-#ifdef CONFIG_AW_BOARD
+#if defined(CONFIG_WCN_PARSE_DTS) \
+	|| defined(CONFIG_AW_BOARD) \
+	|| defined(CONFIG_GOKE_BOARD)
 	marlin_dev->is_btwf_in_sysfs = 1;
 #endif
 
@@ -1035,6 +1054,7 @@ static int marlin_request_firmware(struct marlin_firmware **mfirmware_p)
 	mfirmware->size = FIRMWARE_HEX_SIZE;
 	mfirmware->is_from_fs = 0;
 	mfirmware->priv = firmware_hex_buf;
+	mfirmware->is_from_hex = 1;
 
 #else /* CONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX */
 
@@ -1059,6 +1079,7 @@ static int marlin_request_firmware(struct marlin_firmware **mfirmware_p)
 			mfirmware->data = firmware->data;
 			mfirmware->size = firmware->size;
 			mfirmware->is_from_fs = 1;
+			mfirmware->is_from_hex = 0;
 			marlin_dev->firmware.size = firmware->size;
 			marlin_dev->firmware.data = vmalloc(firmware->size);
 			if (!marlin_dev->firmware.data) {
@@ -1074,6 +1095,7 @@ static int marlin_request_firmware(struct marlin_firmware **mfirmware_p)
 			mfirmware->data = marlin_dev->firmware.data;
 			mfirmware->size = marlin_dev->firmware.size;
 			mfirmware->is_from_fs = 0;
+			mfirmware->is_from_hex = 0;
 		}
 	} else {
 		/* NOTE! We canot guarantee the img is complete when we read it
@@ -1102,6 +1124,7 @@ load_fw:
 		mfirmware->data = buffer;
 		mfirmware->size = FIRMWARE_MAX_SIZE;
 		mfirmware->is_from_fs = 0;
+		mfirmware->is_from_hex = 0;
 		mfirmware->priv = buffer;
 	}
 
@@ -1284,10 +1307,10 @@ static void marlin_release_firmware(struct marlin_firmware *mfirmware)
 		if (mfirmware->is_from_fs)
 			release_firmware(mfirmware->priv);
 		else {
-#ifndef CONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
-			if(mfirmware->data)
-				vfree(mfirmware->data);
-#endif
+			if(mfirmware->is_from_hex == 0) {
+				if(mfirmware->data)
+					vfree(mfirmware->data);
+			}
 		}
 		kfree(mfirmware);
 	}
@@ -1383,7 +1406,7 @@ OUT:
 	return ret;
 }
 
-#ifdef CONFIG_AW_BOARD
+#if defined(CONFIG_AW_BOARD) || defined(CONFIG_RK_BOARD)
 static void marlin_bt_wake_int_en(void)
 {
 	enable_irq(marlin_dev->bt_wake_host_int_num);
@@ -1403,24 +1426,9 @@ static irqreturn_t marlin_bt_wake_int_isr(int irq, void *para)
 	return IRQ_HANDLED;
 }
 
-static int marlin_registsr_bt_wake(struct device *dev)
+static int marlin_registsr_bt_wake(struct device *dev, int bt_wake_host_gpio)
 {
-	struct device_node *np;
-	int bt_wake_host_gpio, ret = 0;
-	struct gpio_config config;
-
-	np = of_find_compatible_node(NULL, NULL, "allwinner,sunxi-btlpm");
-	if (!np) {
-		WCN_ERR("dts node for bt_wake not found");
-		return -EINVAL;
-	}
-	bt_wake_host_gpio = of_get_named_gpio_flags(np, "bt_hostwake", 0,
-		(enum of_gpio_flags *)&config);
-	if (!gpio_is_valid(bt_wake_host_gpio)) {
-		WCN_ERR("bt_hostwake irq is invalid: %d\n",
-			bt_wake_host_gpio);
-		return -EINVAL;
-	}
+	int ret = 0;
 
 	ret = devm_gpio_request(dev, bt_wake_host_gpio,
 				"bt-wake-host-gpio");
@@ -1439,11 +1447,9 @@ static int marlin_registsr_bt_wake(struct device *dev)
 
 	marlin_dev->bt_wake_host_int_num = gpio_to_irq(bt_wake_host_gpio);
 
-	WCN_INFO("%s bt_hostwake gpio=%d mul-sel=%d pull=%d "
-		 "drv_level=%d data=%d intnum=%d\n",
-		 __func__, config.gpio, config.mul_sel, config.pull,
-		 config.drv_level, config.data,
-		 marlin_dev->bt_wake_host_int_num);
+	WCN_INFO("%s bt_hostwake gpio=%d intnum=%d\n",
+		__func__, bt_wake_host_gpio, marlin_dev->bt_wake_host_int_num);
+
 
 	ret = device_init_wakeup(dev, true);
 	if (ret < 0) {
@@ -1688,7 +1694,6 @@ static int marlin_parse_dt(struct platform_device *pdev)
 #ifdef CONFIG_WCN_PARSE_DTS
 	if (of_property_read_bool(np, "bt-wake-host")) {
 		int bt_wake_host_gpio;
-
 		WCN_INFO("wcn config bt wake host\n");
 		marlin_dev->bt_wl_wake_host_en |= BIT(BT_WAKE_HOST);
 		bt_wake_host_gpio =
@@ -1700,17 +1705,40 @@ static int marlin_parse_dt(struct platform_device *pdev)
 				bt_wake_host_gpio);
 			return -EINVAL;
 		}
+#ifdef CONFIG_RK_BOARD
+		ret = marlin_registsr_bt_wake(&pdev->dev, bt_wake_host_gpio);
+		if(ret) {
+			WCN_ERR("Register wake up Host Err %d\n", ret);
+			return ret;
+		}
+#else
 		ret = gpio_request(bt_wake_host_gpio, "bt-wake-host-gpio");
 		if (ret)
 			WCN_ERR("bt-wake-host-gpio request err: %d\n",
 				bt_wake_host_gpio);
+#endif
 	}
 #else
 #ifdef CONFIG_BT_WAKE_HOST_EN
 	WCN_INFO("wcn config bt wake host\n");
 	marlin_dev->bt_wl_wake_host_en |= BIT(BT_WAKE_HOST);
 #ifdef CONFIG_AW_BOARD
-	ret = marlin_registsr_bt_wake(&pdev->dev);
+	int bt_wake_host_gpio;
+	struct gpio_config config;
+	struct device_node *aw_np;
+	aw_np = of_find_compatible_node(NULL, NULL, "allwinner,sunxi-btlpm");
+	if (!aw_np) {
+		WCN_ERR("dts node for bt_wake not found");
+		return -EINVAL;
+	}
+	bt_wake_host_gpio = of_get_named_gpio_flags(aw_np, "bt_hostwake", 0,
+		(enum of_gpio_flags *)&config);
+	if (!gpio_is_valid(bt_wake_host_gpio)) {
+		WCN_ERR("bt_hostwake irq is invalid: %d\n",
+			bt_wake_host_gpio);
+		return -EINVAL;
+	}
+	ret = marlin_registsr_bt_wake(&pdev->dev, bt_wake_host_gpio);
 	if (ret)
 		return ret;
 #endif /* end of CONFIG_AW_BOARD */
@@ -1973,7 +2001,7 @@ static void marlin_send_sdio_config_to_cp_vendor(void)
 
 #if (defined(CONFIG_HISI_BOARD) || defined(CONFIG_AML_BOARD) ||\
 	defined(CONFIG_RK_BOARD) || defined(CONFIG_AW_BOARD) ||\
-	defined(CONFIG_MTK_BOARD) )
+	defined(CONFIG_MTK_BOARD) || defined(CONFIG_GOKE_BOARD))
 	/* Vendor config */
 
 	/* bit[0]: sdio_config_en:
@@ -2028,7 +2056,8 @@ static void marlin_send_sdio_config_to_cp_vendor(void)
 	if (marlin_get_bt_wl_wake_host_en() & BIT(BT_WAKE_HOST)) {
 		sdio_cfg.cfg.bt_wake_host_en = 1;
 		WCN_DEBUG("sdio_config bt_wake_host:[en]\n");
-#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_AML_BOARD)
+#if (defined(CONFIG_HISI_BOARD) || defined(CONFIG_AML_BOARD) ||\
+	defined(CONFIG_GOKE_BOARD))
 		/*
 		 * Hisi only support wakeup by:
 		 * high level - low level for 200ms -high level
@@ -2100,9 +2129,9 @@ static void marlin_send_sdio_config_to_cp_vendor(void)
 	if (marlin_get_bt_wl_wake_host_en() & BIT(WL_WAKE_HOST)) {
 		sdio_cfg.cfg.wl_wake_host_en = 1;
 		WCN_DEBUG("sdio_config wl_wake_host:[en]\n");
-#if defined(CONFIG_HISI_BOARD)
+#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
 		/*
-		 * Hisi only support wakeup by:
+		 * Hisi/Goke only support wakeup by:
 		 * high level - low level for 200ms -high level
 		 */
 		sdio_cfg.cfg.wl_wake_host_trigger_type = 0;
@@ -2126,9 +2155,9 @@ static void marlin_send_sdio_config_to_cp_vendor(void)
 	 * WL_WAKEUP_HOST level dyration time per 10ms,
 	 * example: 0:0ms; 3:30ms; 20:200ms
 	 */
-#if defined(CONFIG_HISI_BOARD)
+#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
 	/*
-	 * Hisi only support wakeup by:
+	 * Hisi/Goke only support wakeup by:
 	 * high level - low level for 200ms -high level
 	 */
 	sdio_cfg.cfg.wake_host_level_duration_10ms = 20;
@@ -2148,7 +2177,7 @@ static void marlin_send_sdio_config_to_cp_vendor(void)
 	 * 1: if BT_WAKEUP_HOST en, ONLY bt packets can wake host;
 	 *    if WL_WAKEUP_HOST en, ONLY wifi packets can wake host
 	 */
-#if (defined(CONFIG_AML_BOARD) || defined(CONFIG_RK_BOARD))
+#if defined(CONFIG_AML_BOARD)
 	sdio_cfg.cfg.wake_host_data_separation = 1;
 	WCN_DEBUG("sdio_config wake_host_data_separation:[yes]\n");
 #else
@@ -2485,6 +2514,31 @@ static int marlin_reset_by_128_bit(void)
 #endif
 #endif
 
+#ifdef CONFIG_GOKE_BOARD
+static unsigned int gk_gpio_set_value(unsigned int gpio, unsigned int value)
+{
+	int status;
+
+	WCN_INFO("%s entry\n", __func__);
+
+	status = drv_gpio_set_direction_bit(gpio, GK_DIR_OUT);
+	if (status != GK_SUCCESS) {
+		WCN_ERR("gpio(%d) drv_gpio_set_direction_bit GK_DIR_OUT failed\n",
+			gpio);
+		return status;
+	}
+	mdelay(RESET_DELAY);
+	status = drv_gpio_write_bit(gpio, value);
+	if (status != GK_SUCCESS) {
+		WCN_ERR("gpio(%d) drv_gpio_write_bit value(%d) failed\n",
+			gpio, value);
+		return status;
+	}
+
+	return GK_SUCCESS;
+}
+#endif
+
 #ifdef CONFIG_HISI_BOARD
 static unsigned int hi_gpio_set_value(unsigned int gpio, unsigned int value)
 {
@@ -2521,6 +2575,13 @@ static int marlin_reset(int val)
 #else /*CONFIG_CHECK_DRIVER_BY_CHIPID*/
 	if (wcn_get_chip_model() == WCN_CHIP_MARLIN3E)
 		marlin_reset_by_128_bit();
+#endif
+
+#ifdef CONFIG_GOKE_BOARD
+	/* As for Gk platform, repull reset pin to reset wcn chip. */
+	gk_gpio_set_value(RTL_REG_RST_GPIO, 0);
+	mdelay(RESET_DELAY);
+	gk_gpio_set_value(RTL_REG_RST_GPIO, 1);
 #endif
 
 #ifdef CONFIG_HISI_BOARD
@@ -2631,7 +2692,7 @@ void marlin_chip_en(bool enable, bool reset)
 
 	/*
 	 * Incar board pull chipen gpio at pin control.
-	 * Hisi board pull chipen gpio at hi_sdio_detect.ko.
+	 * Hisi/goke board pull chipen gpio at hi_sdio_detect.ko.
 	 */
 	if (marlin_dev->chip_en <= 0)
 		return;
@@ -2899,6 +2960,7 @@ static int wcn_usb_fdl_download(void)
 	firmware->size = FDL_HEX_SIZE;
 	firmware->is_from_fs = 0;
 	firmware->priv = fdl_hex_buf;
+	firmware->is_from_hex = 1;
 
 	ret = marlin_firmware_parse_image(firmware);
 	if (ret) {
@@ -2972,14 +3034,12 @@ static void pre_btwifi_download_sdio(struct work_struct *work)
 	if (marlin_dev_is_suspended()) {
 		WCN_INFO("%s skip fdl\n", __func__);
 		marlin_dev->marlin_dev_suspended = 0;
-		goto  skip_fdl;
-	}
-#endif
-	btwifi_download_fdl_firmware();
-#endif
-skip_fdl:
+	} else
+#endif /*defined(CONFIG_WCN_USB) && defined(CONFIG_MTK_BOARD)*/
+		btwifi_download_fdl_firmware();
+#endif /*CONFIG_SYS_REBOOT_NOT_REPOWER_USBCHIP*/
 	marlin_firmware_download_start_usb();
-#endif
+#endif /*CONFIG_WCN_USB*/
 	wcn_get_chip_name();
 
 	if (btwifi_download_firmware() == 0 &&
@@ -3886,7 +3946,8 @@ static int marlin_probe(struct platform_device *pdev)
 
 static int  marlin_remove(struct platform_device *pdev)
 {
-#if (defined(CONFIG_BT_WAKE_HOST_EN) && defined(CONFIG_AW_BOARD))
+#if (defined(CONFIG_BT_WAKE_HOST_EN) && defined(CONFIG_AW_BOARD)) \
+	|| defined(CONFIG_RK_BOARD)
 	marlin_unregistsr_bt_wake();
 #endif
 	cancel_work_sync(&marlin_dev->download_wq);
@@ -3944,6 +4005,13 @@ static void marlin_shutdown(struct platform_device *pdev)
 		marlin_chip_en(false, false);
 	}
 
+#if (defined(CONFIG_GOKE_BOARD) && defined(CONFIG_WCN_USB))
+	/* As for Gk platform, repull reset pin to reset wcn chip. */
+	gk_gpio_set_value(RTL_REG_RST_GPIO, 0);
+	mdelay(RESET_DELAY);
+	gk_gpio_set_value(RTL_REG_RST_GPIO, 1);
+#endif
+
 #if (defined(CONFIG_HISI_BOARD) && defined(CONFIG_WCN_USB))
 	/* As for Hisi platform, repull reset pin to reset wcn chip. */
 	hi_gpio_set_value(RTL_REG_RST_GPIO, 0);
@@ -3964,7 +4032,8 @@ static int marlin_suspend(struct device *dev)
 {
 
 	WCN_INFO("[%s]enter\n", __func__);
-#if (defined(CONFIG_BT_WAKE_HOST_EN) && defined(CONFIG_AW_BOARD))
+#if ((defined(CONFIG_BT_WAKE_HOST_EN) && defined(CONFIG_AW_BOARD)) \
+	|| defined(CONFIG_RK_BOARD))
 	/* enable wcn wake host irq. */
 	marlin_bt_wake_int_en();
 #endif
@@ -4007,7 +4076,8 @@ int marlin_reset_notify_call(enum marlin_cp2_status sts) {
 	int i = 0;
 	for(i = 0; i < MARLIN_ALL; i++) {
 		if(NULL != marlin_reset_notifiers[i].head)
-			raw_notifier_call_chain(&marlin_reset_notifiers[i], sts, (void *)strno(i));
+			raw_notifier_call_chain(&marlin_reset_notifiers[i], \
+				sts, (void *)strno(i));
 	}
 	return 0;
 }
@@ -4031,7 +4101,8 @@ EXPORT_SYMBOL_GPL(marlin_reset_callback_unregister);
 static int marlin_resume(struct device *dev)
 {
 	WCN_INFO("[%s]enter\n", __func__);
-#if (defined(CONFIG_BT_WAKE_HOST_EN) && defined(CONFIG_AW_BOARD))
+#if ((defined(CONFIG_BT_WAKE_HOST_EN) && defined(CONFIG_AW_BOARD)) \
+	|| defined(CONFIG_RK_BOARD))
 	/* disable wcn wake host irq. */
 	marlin_bt_wake_int_dis();
 #endif

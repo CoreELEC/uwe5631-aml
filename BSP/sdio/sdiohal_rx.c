@@ -79,6 +79,9 @@ static int sdiohal_rx_list_parser(struct sdiohal_list_t *data_list,
 	int inout = 0, channel = 0;
 	unsigned int parse_len;
 
+	ktime_t kt;
+	u32 sec;
+
 	sdiohal_list_check(data_list, __func__, SDIOHAL_READ);
 
 	node_num = data_list->node_num;
@@ -103,6 +106,21 @@ static int sdiohal_rx_list_parser(struct sdiohal_list_t *data_list,
 					    puh->len);
 				continue;
 			}
+
+			kt = ktime_get();
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+			sec = (u32)(div_u64(kt, NSEC_PER_SEC));
+#else/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
+			sec = (u32)(div_u64(kt.tv64, NSEC_PER_SEC));
+#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
+			p_data->throughtput_rx.bytes += puh->len;
+			if (p_data->throughtput_rx.sec != sec) {
+				p_data->throughtput_rx.throughtput = (p_data->throughtput_rx.bytes * 8) >> 10;
+				p_data->throughtput_rx.sec = sec;
+				p_data->throughtput_rx.bytes = 0;
+				sdiohal_pr_perf("tp_rx: %d Kbps\n", p_data->throughtput_rx.throughtput);
+			}
+
 			p_data->rx_packer_cnt++;
 			mbuf_node->len = MAX_MBUF_SIZE;
 			sdiohal_data_list_assignment(mbuf_node, puh, channel);
@@ -131,6 +149,9 @@ static int sdiohal_rx_buf_parser(char *data_buf, int valid_len)
 	unsigned char *p = NULL;
 	unsigned int parse_len;
 
+	ktime_t kt;
+	u32 sec;
+
 	puh = (struct sdio_puh_t *)data_buf;
 	for (parse_len = 0; parse_len < valid_len;) {
 		if (puh->eof != 0)
@@ -151,6 +172,21 @@ static int sdiohal_rx_buf_parser(char *data_buf, int valid_len)
 					    puh->len);
 				continue;
 			}
+
+			kt = ktime_get();
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+			sec = (u32)(div_u64(kt, NSEC_PER_SEC));
+#else/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
+			sec = (u32)(div_u64(kt.tv64, NSEC_PER_SEC));
+#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
+			p_data->throughtput_rx.bytes += puh->len;
+			if (p_data->throughtput_rx.sec != sec) {
+				p_data->throughtput_rx.throughtput = (p_data->throughtput_rx.bytes * 8) >> 10;
+				p_data->throughtput_rx.sec = sec;
+				p_data->throughtput_rx.bytes = 0;
+				sdiohal_pr_perf("tp_rx: %d Kbps\n", p_data->throughtput_rx.throughtput);
+			}
+
 			p_data->rx_packer_cnt++;
 
 			data_list = sdiohal_get_rx_mbuf_node(1);

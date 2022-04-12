@@ -361,13 +361,11 @@ static int sprdwl_cmd_lock(struct sprdwl_cmd *cmd)
 	if (intf->priv->is_suspending == 0)
 		__pm_stay_awake(cmd->wake_lock);
 
-#ifdef UNISOC_WIFI_PS
 	if (SPRDWL_PS_SUSPENDED == intf->suspend_mode) {
 		reinit_completion(&intf->suspend_completed);
 		wait_for_completion(&intf->suspend_completed);
 		wl_info("wait for completion\n");
 	}
-#endif
 
 	wl_debug("cmd->refcnt=%x\n", atomic_read(&cmd->refcnt));
 
@@ -664,7 +662,8 @@ int sprdwl_cmd_send_recv(struct sprdwl_priv *priv,
 			intf = (struct sprdwl_intf *)(vif->priv->hw_priv);
 			tx_msg = (struct sprdwl_tx_msg *)intf->sprdwl_tx;
 			if (intf->cp_asserted == 0 &&
-				tx_msg->hang_recovery_status == HANG_RECOVERY_END)
+				tx_msg->hang_recovery_status == HANG_RECOVERY_END &&
+				!intf->exit)
 				sprdwl_send_assert_cmd(vif, cmd_id, CMD_RSP_TIMEOUT_ERROR);
 			sprdwl_put_vif(vif);
 		}
@@ -2665,6 +2664,10 @@ static int handle_rsp_status_err(u8 cmd_id, s8 status)
 			(SPRDWL_CMD_STATUS_LENGTH_ERROR == status))
 			flag = -1;
 		 break;
+	case WIFI_CMD_OPEN:
+		if (SPRDWL_CMD_STATUS_ARG_ERROR == status)
+			flag = -1;
+ 		break;
 	default:
 		 flag = 0;
 		 break;
@@ -2723,7 +2726,7 @@ unsigned short sprdwl_rx_rsp_process(struct sprdwl_priv *priv, u8 *msg)
 		wl_debug("ctx_id %d recv rsp[%s]\n",
 			hdr->common.ctx_id, cmd2str(hdr->cmd_id));
 		if (unlikely(hdr->status != 0)) {
-			wl_debug("%s ctx_id %d recv rsp[%s] status[%s]\n",
+			wl_err("%s ctx_id %d recv rsp[%s] status[%s]\n",
 			       __func__, hdr->common.ctx_id,
 			       cmd2str(hdr->cmd_id),
 			       err2str(hdr->status));
@@ -2765,7 +2768,9 @@ void sprdwl_event_scan_done(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
 	struct sprdwl_event_scan_done *p =
 	    (struct sprdwl_event_scan_done *)data;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 	u8 bucket_id = 0;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
 
 	switch (p->type) {
 	case SPRDWL_SCAN_DONE:
@@ -2778,12 +2783,14 @@ void sprdwl_event_scan_done(struct sprdwl_vif *vif, u8 *data, u16 len)
 		wl_ndev_log(L_DBG, vif->ndev, "%s schedule scan got %d BSSes\n",
 			    __func__, bss_count);
 		break;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 	case SPRDWL_GSCAN_DONE:
 		bucket_id = ((struct sprdwl_event_gscan_done *)data)->bucket_id;
 		sprdwl_gscan_done(vif, bucket_id);
 		wl_ndev_log(L_DBG, vif->ndev, "%s gscan got %d bucketid done\n",
 			    __func__, bucket_id);
 		break;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
 	case SPRDWL_SCAN_ERROR:
 	default:
 		sprdwl_scan_done(vif, true);
@@ -2897,14 +2904,10 @@ void sprdwl_event_disconnect(struct sprdwl_vif *vif, u8 *data, u16 len)
 
 	memcpy(&reason_code, data, sizeof(reason_code));
 	wl_info("%s reason code = %d\n", __func__, reason_code);
-#ifdef SYNC_DISCONNECT
-	if (atomic_read(&vif->sync_disconnect_event)) {
-		vif->disconnect_event_code = reason_code;
-		atomic_set(&vif->sync_disconnect_event, 0);
-		wake_up(&vif->disconnect_wq);
-	} else
-#endif
-		sprdwl_report_disconnection(vif, reason_code);
+
+	complete(&vif->disconnect_completed);
+
+	sprdwl_report_disconnection(vif, reason_code);
 
 }
 
@@ -2979,6 +2982,7 @@ void sprdwl_event_frame(struct sprdwl_vif *vif, u8 *data, u16 len, int flag)
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 void sprdwl_event_epno_results(struct sprdwl_vif *vif, u8 *data, u16 data_len)
 {
 	int i;
@@ -3135,6 +3139,7 @@ void sprdwl_event_gscan_frame(struct sprdwl_vif *vif, u8 *data, u16 len)
 	}
 
 }
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
 
 void sprdwl_event_cqm(struct sprdwl_vif *vif, u8 *data, u16 len)
 {
@@ -3371,10 +3376,10 @@ int sprdwl_fw_power_down_ack(struct sprdwl_priv *priv, u8 ctx_id)
 
 	ret =  sprdwl_cmd_send_recv(priv, msg, CMD_WAIT_TIMEOUT, NULL, NULL);
 
-	if (intf->fw_power_down == 1) {
-		sprdwcn_bus_allow_sleep(WIFI);
+#ifdef CPUFREQ_UPDATE_SUPPORT
+	if (intf->fw_power_down == 1)
 		sprdwl_unboost();
-	}
+#endif /* CPUFREQ_UPDATE_SUPPORT */
 
 	if (ret)
 		wl_err("host send data cmd failed, ret=%d\n", ret);
@@ -3414,18 +3419,24 @@ void sprdwl_event_chan_changed(struct sprdwl_vif *vif, u8 *data, u16 len)
 		wl_err("%s, unknowed event!\n", __func__);
 	} else if (p->initiator == 1) {
 		channel = p->target_channel;
-		freq = 2412 + (channel-1) * 5;
+
+		if (channel > 14)
+			freq = 5000 + channel*5;
+		else
+			freq = 2412 + (channel-1)*5;
+
 		if (wiphy)
 			ch = ieee80211_get_channel(wiphy, freq);
 		else
 			wl_err("%s, wiphy is null!\n", __func__);
-		if (ch)
+
+		if (ch) {
 			/* we will be active on the channel */
 			cfg80211_chandef_create(&chandef, ch,
 						NL80211_CHAN_HT20);
-		else
+			cfg80211_ch_switch_notify(vif->ndev, &chandef);
+		} else
 			wl_err("%s, ch is null!\n", __func__);
-		cfg80211_ch_switch_notify(vif->ndev, &chandef);
 	}
 }
 
@@ -3564,12 +3575,14 @@ unsigned short sprdwl_rx_event_process(struct sprdwl_priv *priv, u8 *msg)
 		/* for old Marlin2 CP code or BA*/
 		sprdwl_event_frame(vif, data, len, 0);
 		break;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 	case WIFI_EVENT_GSCAN_FRAME:
 		sprdwl_event_gscan_frame(vif, data, len);
 		break;
 	case WIFI_EVENT_RSSI_MONITOR:
 		sprdwl_event_rssi_monitor(vif, data, len);
 		break;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) */
 	case WIFI_EVENT_SCAN_DONE:
 		sprdwl_event_scan_done(vif, data, len);
 		break;
@@ -3590,11 +3603,11 @@ unsigned short sprdwl_rx_event_process(struct sprdwl_priv *priv, u8 *msg)
 	case WIFI_EVENT_SUSPEND_RESUME:
 		sprdwl_event_suspend_resume(vif, data, len);
 		break;
-#ifdef NAN_SUPPORT
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)) && defined(NAN_SUPPORT)
 	case WIFI_EVENT_NAN:
 		sprdwl_event_nan(vif, data, len);
 		break;
-#endif /* NAN_SUPPORT */
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)) && defined(NAN_SUPPORT) */
 #ifdef UWE5621_FTR
 	case WIFI_EVENT_STA_LUT_INDEX:
 		sprdwl_event_sta_lut(vif, data, len);
@@ -3608,11 +3621,11 @@ unsigned short sprdwl_rx_event_process(struct sprdwl_priv *priv, u8 *msg)
 		sprdwl_11h_handle_radar_detected(vif, data, len);
 		break;
 #endif
-#ifdef RTT_SUPPORT
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)) && defined(RTT_SUPPORT)
 	case WIFI_EVENT_RTT:
 		sprdwl_event_ftm(vif, data, len);
 		break;
-#endif /* RTT_SUPPORT */
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)) && defined(RTT_SUPPORT) */
 	case WIFI_EVENT_HANG_RECOVERY:
 		sprdwl_event_hang_recovery(vif, data, len);
 		break;
@@ -3703,20 +3716,17 @@ int sprdwl_set_wowlan(struct sprdwl_priv *priv, int subcmd, void *pad, int pad_l
 	return sprdwl_cmd_send_recv(priv, msg, CMD_WAIT_TIMEOUT, NULL, NULL);
 }
 
-#ifdef SYNC_DISCONNECT
 int sprdwl_sync_disconnect_event(struct sprdwl_vif *vif, unsigned int timeout)
 {
-	int ret;
+	int ret = 0;
 
+	reinit_completion(&vif->disconnect_completed);
 	sprdwl_cmd_lock(&g_sprdwl_cmd);
-	vif->disconnect_event_code = 0;
-	ret = wait_event_timeout(vif->disconnect_wq,
-				 atomic_read(&vif->sync_disconnect_event) == 0, timeout);
+	ret = wait_for_completion_timeout(&vif->disconnect_completed, timeout);
 	sprdwl_cmd_unlock(&g_sprdwl_cmd);
 
 	return ret;
 }
-#endif
 
 int sprdwl_set_packet_offload(struct sprdwl_priv *priv, u8 vif_ctx_id,
 			      u32 req, u8 enable, u32 interval,

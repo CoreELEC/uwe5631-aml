@@ -11,7 +11,6 @@
 #else
 #include <linux/sched.h>
 #endif
-#include "wcn_wrapper.h"
 #include <wcn_bus.h>
 #ifdef CONFIG_WCN_SLP
 #include "../sleep/sdio_int.h"
@@ -54,7 +53,7 @@ extern long int sdiohal_log_level;
 	} while (0)
 #define sdiohal_pr_perf(fmt, args...) \
 	do { if (sdiohal_log_level & SDIOHAL_PERF_LEVEL) \
-		trace_printk(fmt, ## args); \
+		trace_printk("sdiohal:" fmt, ## args); \
 	} while (0)
 #else
 #define sdiohal_normal(fmt, args...)
@@ -303,6 +302,12 @@ struct sdiohal_data_bak_t {
 	unsigned char data_bk[SDIOHAL_PRINTF_LEN];
 };
 
+struct sdiohal_throughtput {
+	u64 bytes;
+	u32 sec;
+	u32 throughtput;
+};
+
 struct sdiohal_data_t {
 	struct task_struct *tx_thread;
 	struct task_struct *rx_thread;
@@ -394,9 +399,12 @@ struct sdiohal_data_t {
 #endif
 	int printlog_txchn;
 	int printlog_rxchn;
+	struct sdiohal_throughtput throughtput_tx;
+	struct sdiohal_throughtput throughtput_rx;
 };
 
 struct sdiohal_data_t *sdiohal_get_data(void);
+unsigned char sdiohal_get_wl_wake_host_en(void);
 unsigned char sdiohal_get_tx_mode(void);
 unsigned char sdiohal_get_rx_mode(void);
 unsigned char sdiohal_get_irq_type(void);
@@ -427,7 +435,17 @@ void sdiohal_callback_lock(struct mutex *mutex);
 void sdiohal_callback_unlock(struct mutex *mutex);
 
 /* for sleep */
-#ifdef CONFIG_WCN_SLP
+/*
+ *When the voltage of VDDCORE is 0.7V, it cannot reply to SDIO CMD,
+ *so the driver does not send cp2 core sleep command, but only sends
+ *BT and WIFI power_save command in sdiohal_suspend and sdiohal_resume
+ *interfaces. According to the actual test, the power consumption of
+ *not delivering the core sleep instruction is 0.03W less than that of
+ *delivering the core sleep instruction,in addition, the main control
+ *platform does not need SDIO CLK for always supply. To enable the change
+ *function, please open the macro CONFIG_WCN_TXRX_NSLP
+ */
+#if (defined CONFIG_WCN_SLP) && (!defined CONFIG_WCN_TXRX_NSLP)
 void sdiohal_cp_tx_sleep(enum slp_subsys subsys);
 void sdiohal_cp_tx_wakeup(enum slp_subsys subsys);
 void sdiohal_cp_rx_sleep(enum slp_subsys subsys);

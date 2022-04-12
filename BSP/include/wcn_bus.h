@@ -134,6 +134,7 @@ struct sprdwcn_bus_ops {
 			 struct mbuf_t *tail, int num);
 	int (*push_list_direct)(int chn, struct mbuf_t *head,
 			 struct mbuf_t *tail, int num);
+	unsigned char (*get_wl_wake_host_en)(void);
 	unsigned char (*get_tx_mode)(void);
 	unsigned char (*get_rx_mode)(void);
 	unsigned char (*get_irq_type)(void);
@@ -495,6 +496,17 @@ void sprdwcn_bus_remove_card(void)
 }
 
 static inline
+unsigned char sprdwcn_bus_get_wl_wake_host_en(void)
+{
+	struct sprdwcn_bus_ops *bus_ops = get_wcn_bus_ops();
+
+	if (!bus_ops || !bus_ops->get_wl_wake_host_en)
+		return 0;
+
+	return bus_ops->get_wl_wake_host_en();
+}
+
+static inline
 unsigned char sprdwcn_bus_get_tx_mode(void)
 {
 	struct sprdwcn_bus_ops *bus_ops = get_wcn_bus_ops();
@@ -536,28 +548,6 @@ unsigned int sprdwcn_bus_get_blk_size(void)
 		return 0;
 
 	return bus_ops->get_blk_size();
-}
-
-static inline
-void sprdwcn_bus_allow_sleep(enum slp_subsys subsys)
-{
-	struct sprdwcn_bus_ops *bus_ops = get_wcn_bus_ops();
-
-	if (!bus_ops || !bus_ops->allow_sleep)
-		return;
-
-	bus_ops->allow_sleep(subsys);
-}
-
-static inline
-void sprdwcn_bus_sleep_wakeup(enum slp_subsys subsys)
-{
-	struct sprdwcn_bus_ops *bus_ops = get_wcn_bus_ops();
-
-	if (!bus_ops || !bus_ops->sleep_wakeup)
-		return;
-
-	bus_ops->sleep_wakeup(subsys);
 }
 
 static inline

@@ -208,4 +208,8 @@ void sprdwl_report_tdls(struct sprdwl_vif *vif, const u8 *peer,
 void sprdwl_report_fake_probe(struct wiphy *wiphy, u8 *ie, size_t ielen);
 int sprdwl_change_beacon(struct sprdwl_vif *vif,
 		struct cfg80211_beacon_data *beacon);
+int sprdwl_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
+				   struct cfg80211_connect_params *sme);
+int sprdwl_cfg80211_disconnect(struct wiphy *wiphy,
+				      struct net_device *ndev, u16 reason_code);
 #endif

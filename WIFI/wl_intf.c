@@ -377,7 +377,9 @@ void sprdwl_count_tx_tp(struct sprdwl_tx_msg *tx_msg, int num)
 	if (div_u64((tx_msg->tx_data_num * 1000), timeus) >= intf->txnum_level &&
 		tx_msg->tx_data_num >= 1000) {
 		tx_msg->tx_data_num = 0;
+#ifdef CPUFREQ_UPDATE_SUPPORT
 		sprdwl_boost();
+#endif /* CPUFREQ_UPDATE_SUPPORT */
 	} else if (timeus >= USEC_PER_SEC) {
 		tx_msg->tx_data_num = 0;
 	}
@@ -1053,7 +1055,9 @@ void sprdwl_count_rx_tp(struct sprdwl_rx_if *rx_if, int num)
 	if (div_u64((rx_if->rx_data_num * 1000), timeus) >= intf->rxnum_level &&
 		rx_if->rx_data_num >= 1000) {
 		rx_if->rx_data_num = 0;
+#ifdef CPUFREQ_UPDATE_SUPPORT
 		sprdwl_boost();
+#endif /* CPUFREQ_UPDATE_SUPPORT */
 	} else if (timeus >= USEC_PER_SEC) {
 		rx_if->rx_data_num = 0;
 	}
@@ -1362,7 +1366,7 @@ int sprdwl_suspend_resume_handle(int chn, int mode)
 	struct sprdwl_intf *intf = get_intf();
 	struct sprdwl_priv *priv = intf->priv;
 	struct sprdwl_tx_msg *tx_msg = (struct sprdwl_tx_msg *)intf->sprdwl_tx;
-	int ret;
+	int ret = -EBUSY;
 	struct sprdwl_vif *vif;
 	struct timespec time;
 	enum sprdwl_mode sprdwl_mode = SPRDWL_MODE_STATION;
@@ -1399,6 +1403,17 @@ int sprdwl_suspend_resume_handle(int chn, int mode)
 		}
 		priv->wakeup_tracer.resume_flag = 0;
 		intf->suspend_mode = SPRDWL_PS_SUSPENDING;
+
+		if ((vif->mode == SPRDWL_MODE_STATION) && (vif->sm_state == SPRDWL_CONNECTED)
+			&& (sprdwcn_bus_get_wl_wake_host_en() == SPRDWL_NO_WAKE_HOST)) {
+			vif->suspend_resume_connect.reconnect_flag = true;
+			sprdwl_cfg80211_disconnect(priv->wiphy, vif->ndev, 0);
+		}
+
+		/* if cp2 is wakeup, send power_down firstly */
+		if (intf->fw_power_down != 1)
+			sprdwl_fw_power_down_ack(vif->priv, vif->ctx_id);
+
 		getnstimeofday(&time);
 		intf->sleep_time = timespec_to_ns(&time);
 		priv->is_suspending = 1;
@@ -1406,27 +1421,18 @@ int sprdwl_suspend_resume_handle(int chn, int mode)
 					vif->ctx_id,
 					SPRDWL_SUSPEND_RESUME,
 					0);
-		if (ret == 0) {
+		if (ret == 0)
 			intf->suspend_mode = SPRDWL_PS_SUSPENDED;
-#ifdef UNISOC_WIFI_PS
-			sprdwcn_bus_allow_sleep(WIFI);
-			wl_info("sprdwcn bus allow sleep\n");
-#endif
-		}
 		else
 			intf->suspend_mode = SPRDWL_PS_RESUMED;
-		sprdwl_put_vif(vif);
-		return ret;
+
+		wl_info("%s, %d,suspend ret=%d\n", __func__, __LINE__, ret);
 	} else if (mode == 1) {
-#ifdef UNISOC_WIFI_PS
-		sprdwcn_bus_sleep_wakeup(WIFI);
-		wl_info("sprdwcn bus wake up\n");
-#endif
 		intf->suspend_mode = SPRDWL_PS_RESUMING;
 		priv->wakeup_tracer.resume_flag = 1;
-#ifdef UNISOC_WIFI_PS
+
 		complete(&intf->suspend_completed);
-#endif
+
 		getnstimeofday(&time);
 		intf->sleep_time = timespec_to_ns(&time) - intf->sleep_time;
 		ret = sprdwl_power_save(priv,
@@ -1436,11 +1442,14 @@ int sprdwl_suspend_resume_handle(int chn, int mode)
 		wl_info("%s, %d,resume ret=%d, resume after %lu ms\n",
 			__func__, __LINE__,
 			ret, intf->sleep_time/1000000);
-		sprdwl_put_vif(vif);
-		return ret;
+
+		if ((vif->mode == SPRDWL_MODE_STATION) && (vif->suspend_resume_connect.reconnect_flag == true)) {
+			sprdwl_cfg80211_connect(priv->wiphy, vif->ndev, &vif->suspend_resume_connect.connect_params);
+			vif->suspend_resume_connect.reconnect_flag = false;
+		}
 	}
 	sprdwl_put_vif(vif);
-	return -EBUSY;
+	return ret;
 }
 
 /*  SDIO TX:
@@ -1760,6 +1769,7 @@ void sprdwl_tx_delba(struct sprdwl_intf *intf,
 	sprdwl_put_vif(vif);
 }
 
+#ifdef CPUFREQ_UPDATE_SUPPORT
 int sprdwl_notifier_boost(struct notifier_block *nb, unsigned long event, void *data)
 {
 #if KERNEL_VERSION(5, 4, 19) <= LINUX_VERSION_CODE
@@ -1809,6 +1819,7 @@ void sprdwl_unboost(void)
 		cpufreq_update_policy(0);
 	}
 }
+#endif /* CPUFREQ_UPDATE_SUPPORT */
 
 void adjust_txnum_level(char *buf, unsigned char offset)
 {
@@ -1960,13 +1971,15 @@ int sprdwl_intf_init(struct sprdwl_priv *priv, struct sprdwl_intf *intf)
 	intf->fw_power_down = 0;
 	intf->txnum_level = BOOST_TXNUM_LEVEL;
 	intf->rxnum_level = BOOST_RXNUM_LEVEL;
+
+#ifdef CPUFREQ_UPDATE_SUPPORT
 	intf->boost = 0;
+#endif /* CPUFREQ_UPDATE_SUPPORT */
+
 	intf->tcpack_time_in_ms = RX_TP_COUNT_IN_MS;
 	intf->tcpack_delay_th_in_mb = DROPACK_TP_TH_IN_M;
 
-#ifdef UNISOC_WIFI_PS
 	init_completion(&intf->suspend_completed);
-#endif
 
 	return ret;
 }
