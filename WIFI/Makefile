@@ -55,6 +55,8 @@ ccflags-y += -DPPPOE_LLC_SUPPORT
 #ccflags-y += -DWOW_SUPPORT -DCONFIG_PM
 #ccflags-y += -DCPUFREQ_UPDATE_SUPPORT
 
+ccflags-y += -DCUSTOM_REGDOMAIN
+
 #####module name ###
 obj-m += $(MODULE_NAME).o
 
