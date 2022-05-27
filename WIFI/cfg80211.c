@@ -45,8 +45,10 @@
 #include "qos.h"
 #endif
 
+#if 0
 #if !defined(CONFIG_CFG80211_INTERNAL_REGDB) || defined(CUSTOM_REGDOMAIN)
 #include "reg_domain.h"
+#endif
 #endif
 
 #define RATETAB_ENT(_rate, _rateid, _flags)				\
@@ -3459,6 +3461,7 @@ void sprdwl_save_ch_info(struct sprdwl_priv *priv, u32 band, u32 flags, int cent
 
 }
 
+#if 0
 #if defined(CONFIG_CFG80211_INTERNAL_REGDB) && !defined(CUSTOM_REGDOMAIN)
 static void sprdwl_reg_notify(struct wiphy *wiphy,
 			      struct regulatory_request *request)
@@ -3732,6 +3735,7 @@ void sprdwl_reg_notify(struct wiphy *wiphy,
 	kfree(rd);
 }
 #endif
+#endif
 
 static void sprdwl_ht_cap_update(struct ieee80211_sta_ht_cap *ht_info,
 		struct sprdwl_priv *priv)
@@ -3773,9 +3777,11 @@ void sprdwl_setup_wiphy(struct wiphy *wiphy, struct sprdwl_priv *priv)
 	struct wiphy_sec2_t *sec2 = NULL;
 	struct ieee80211_sta_vht_cap *vht_info = NULL;
 	struct ieee80211_sta_ht_cap *ht_info = NULL;
+#if 0
 #if !defined (CONFIG_CFG80211_INTERNAL_REGDB) || defined(CUSTOM_REGDOMAIN)
 	const struct ieee80211_regdomain *pRegdom;
 	char alpha2[2];
+#endif
 #endif
 
 	wiphy->mgmt_stypes = sprdwl_mgmt_stypes;
@@ -3920,6 +3926,7 @@ void sprdwl_setup_wiphy(struct wiphy *wiphy, struct sprdwl_priv *priv)
 		}
 	}
 
+#if 0
 	if (priv->fw_std & SPRDWL_STD_11D) {
 		wl_info("\tIEEE802.11d supported\n");
 		wiphy->reg_notifier = sprdwl_reg_notify;
@@ -3939,6 +3946,7 @@ void sprdwl_setup_wiphy(struct wiphy *wiphy, struct sprdwl_priv *priv)
 		}
 #endif
 	}
+#endif
 
 	if (priv->fw_capa & SPRDWL_CAPA_MCC) {
 		wl_info("\tMCC supported\n");
