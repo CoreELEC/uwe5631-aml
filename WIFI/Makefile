@@ -55,15 +55,13 @@ ccflags-y += -DPPPOE_LLC_SUPPORT
 #ccflags-y += -DWOW_SUPPORT -DCONFIG_PM
 #ccflags-y += -DCPUFREQ_UPDATE_SUPPORT
 
-ccflags-y += -DCUSTOM_REGDOMAIN
-
 #####module name ###
 obj-m += $(MODULE_NAME).o
 
 #######add .o file#####
 $(MODULE_NAME)-objs += main.o cfg80211.o txrx.o cmdevt.o npi.o msg.o work.o vendor.o \
 				  tcp_ack.o mm.o reorder.o wl_core.o tx_msg.o rx_msg.o \
-				  wl_intf.o qos.o dbg_ini_util.o reg_domain.o
+				  wl_intf.o qos.o dbg_ini_util.o #reg_domain.o
 $(MODULE_NAME)-objs += defrag.o
 $(MODULE_NAME)-objs += ibss.o
 $(MODULE_NAME)-objs += nan.o
