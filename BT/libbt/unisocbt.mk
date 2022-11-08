@@ -29,6 +29,7 @@ PRODUCT_PACKAGES += \
     bt_did_unisoc.conf \
     auto_pair_devlist_unisoc.conf \
     bdt_unisoc \
+    libbt-sprd_suite \
     libbt-utils_unisoc \
     libbt-hci_unisoc \
     btools_unisoc

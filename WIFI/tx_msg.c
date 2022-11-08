@@ -865,12 +865,7 @@ static int sprdwl_handle_to_send_list(struct sprdwl_intf *intf,
 	struct sprdwl_msg_list *list = &tx_msg->tx_list_qos_pool;
 	u8 coex_bt_on = intf->coex_bt_on;
 
-#ifdef CP2_RESET_SUPPORT
-	if(intf->cp_asserted == 1)
-		return 0;
-#endif
-
-	if (!list_empty(&tx_msg->xmit_msg_list.to_send_list)) {
+	if ((!list_empty(&tx_msg->xmit_msg_list.to_send_list)) && (intf->cp_asserted != 1)) {
 		to_send_list = &tx_msg->xmit_msg_list.to_send_list;
 		t_lock = &tx_msg->xmit_msg_list.send_lock;
 		spin_lock_bh(t_lock);
@@ -1340,8 +1335,8 @@ static int sprdwl_tx_work_queue(void *data)
 
 	while (1) {
 		tx_down(tx_msg);
-		if (intf->exit || kthread_should_stop())
-			return 0;
+		if (intf->exit)
+			break;
 		need_polling = 0;
 		polling_times = 0;
 		/*During hang recovery, send data is not allowed.
@@ -1421,8 +1416,13 @@ static int sprdwl_tx_work_queue(void *data)
 		}
 	}
 
-	wl_err("%s no longer exsit, flush data, return!\n", __func__);
-	sprdwl_flush_all_txlist(tx_msg);
+	for (;;) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		if (kthread_should_stop())
+			break;
+		schedule();
+	}
+	__set_current_state(TASK_RUNNING);
 
 	return 0;
 }
@@ -1691,11 +1691,7 @@ bool is_vowifi_pkt(struct sk_buff *skb, bool *b_cmd_path)
 	if (iphdr->protocol != IPPROTO_UDP)
 		return false;
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0)
-	iphdrlen = ip_hdrlen(skb);
-#else
 	iphdrlen = iphdr->ihl * 4;
-#endif
 	udphdr = (struct udphdr *)(skb->data + ETHER_HDR_LEN + iphdrlen);
 	dscp = (iphdr->tos >> 2);
 	switch (dscp) {
@@ -1756,11 +1752,7 @@ int sprdwl_tx_filter_ip_pkt(struct sk_buff *skb, struct net_device *ndev)
 		/* check for udp header */
 		if (iphdr->protocol != IPPROTO_UDP)
 			return 1;
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0)
-		iphdrlen = ip_hdrlen(skb);
-#else
 		iphdrlen = iphdr->ihl * 4;
-#endif
 	} else {
 		return 1;
 	}

@@ -8,33 +8,6 @@ all_dependencies := driver
 driver_dependencies :=
 
 #### Global configs for each item ######
-ifeq ($(CFG_GK_WIFI_DEVICE_UWE5621),y)
-export CONFIG_WCN_SDIO = y
-#export CONFIG_WCN_USB = y
-ccflags-y += -DCONFIG_CHECK_DRIVER_BY_CHIPID
-#ccflags-y += -DCONFIG_UWE5621
-BSP_CHIP_ID := uwe5621
-WCN_HW_TYPE := sdio
-endif
-
-ifeq ($(CFG_GK_WIFI_DEVICE_UWE5623),y)
-export CONFIG_WCN_SDIO = y
-#export CONFIG_WCN_USB = y
-ccflags-y += -DCONFIG_CHECK_DRIVER_BY_CHIPID
-#ccflags-y += -DCONFIG_UWE5623
-BSP_CHIP_ID := uwe5621
-WCN_HW_TYPE := sdio
-endif
-
-ifeq ($(CFG_GK_WIFI_DEVICE_UWE5623_USB),y)
-#export CONFIG_WCN_SDIO = y
-export CONFIG_WCN_USB = y
-#ccflags-y += -DCONFIG_CHECK_DRIVER_BY_CHIPID
-ccflags-y += -DCONFIG_UWE5623
-BSP_CHIP_ID := uwe5623
-WCN_HW_TYPE := usb
-endif
-
 ifeq ($(CFG_HI_WIFI_DEVICE_UWE5621),y)
 export CONFIG_WCN_SDIO = y
 #export CONFIG_WCN_USB = y
@@ -81,15 +54,6 @@ BSP_CHIP_ID := uwe5621
 WCN_HW_TYPE := sdio
 endif
 
-ifeq ($(CFG_AML_WIFI_DEVICE_UWE5623_USB),y)
-#export CONFIG_WCN_SDIO = y
-export CONFIG_WCN_USB = y
-#ccflags-y += -DCONFIG_CHECK_DRIVER_BY_CHIPID
-ccflags-y += -DCONFIG_UWE5623
-BSP_CHIP_ID := uwe5623
-WCN_HW_TYPE := usb
-endif
-
 ifeq ($(CONFIG_RK_WIFI_DEVICE_UWE5621),y)
 export CONFIG_WCN_SDIO = y
 #export CONFIG_WCN_USB = y
@@ -126,15 +90,6 @@ export CONFIG_WCN_USB = y
 ccflags-y += -DCONFIG_UWE5623
 BSP_CHIP_ID := uwe5623
 WCN_HW_TYPE := usb
-endif
-
-ifeq ($(CFG_MTK_WIFI_DEVICE_UWE5623),y)
-export CONFIG_WCN_SDIO = y
-#export CONFIG_WCN_USB = y
-ccflags-y += -DCONFIG_CHECK_DRIVER_BY_CHIPID
-#ccflags-y += -DCONFIG_UWE5623
-BSP_CHIP_ID := uwe5621
-WCN_HW_TYPE := sdio
 endif
 
 MODULE_NAME := $(BSP_CHIP_ID)_bsp_$(WCN_HW_TYPE)
@@ -183,103 +138,25 @@ ifeq ($(CONFIG_WCN_GNSS),y)
 ccflags-y += -DCONFIG_WCN_GNSS
 endif
 
+ifneq ($(TARGET_BUILD_VARIANT),user)
+#ccflags-y += -DCONFIG_WCN_LOOPCHECK
+ccflags-y += -DCONFIG_CPLOG_DEBUG
+endif
+
 ccflags-y += -DCONFIG_WCN_BOOT
 ccflags-y += -DCONFIG_WCN_UTILS
+
+#####not use CONFIG_CP2_ASSERT, must close CONFIG_WCN_LOOPCHECK#####
+ccflags-y += -DCONFIG_CP2_ASSERT
 
 #### include path ######
 ccflags-y += -I$(src)/include/
 ccflags-y += -I$(src)/platform/
 ccflags-y += -I$(src)/platform/rf/
-#add by amloigc
 ccflags-y += -I$(KERNEL_SRC)/$(M)/include/
 ccflags-y += -I$(KERNEL_SRC)/$(M)/platform/
 ccflags-y += -I$(KERNEL_SRC)/$(M)/include/rf/
-
 #### add cflag for Customer ######
-### ---------- Goke start ---------- ###
-ifeq ($(CFG_GK_WIFI_DEVICE_UWE5621),y)
-#### add cflag ######
-ccflags-y += -DCONFIG_GOKE_BOARD
-#ccflags-y += -DCONFIG_WCN_PARSE_DTS
-#ccflags-y += -DCONFIG_WCN_CHIPEN
-#ccflags-y += -DCONFIG_WCN_RESET
-#ccflags-y += -DCONFIG_WCN_POWER_UP_DOWN
-#ccflags-y += -DCONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
-ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
-#ccflags-y += -DCONFIG_WL_WAKE_HOST_EN
-ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
-#ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
-#ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-#ccflags-y += -DCONFIG_MEM_PD
-ifeq ($(CONFIG_WCN_SDIO),y)
-ifneq ($(TARGET_BUILD_VARIANT),user)
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-endif
-ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
-ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
-ccflags-y += -DCONFIG_SDIO_INBAND_INT
-#ccflags-y += -DCONFIG_SDIO_INBAND_POLLING
-ccflags-y += -DCONFIG_SDIO_BLKSIZE_512
-#ccflags-y += -DCONFIG_SDIO_PWRSEQ
-endif
-
-all_dependencies += install
-endif
-
-ifeq ($(CFG_GK_WIFI_DEVICE_UWE5623),y)
-#### add cflag ######
-ccflags-y += -DCONFIG_GOKE_BOARD
-#ccflags-y += -DCONFIG_WCN_PARSE_DTS
-#ccflags-y += -DCONFIG_WCN_CHIPEN
-#ccflags-y += -DCONFIG_WCN_RESET
-#ccflags-y += -DCONFIG_WCN_POWER_UP_DOWN
-#ccflags-y += -DCONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
-ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
-#ccflags-y += -DCONFIG_WL_WAKE_HOST_EN
-ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
-#ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
-#ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-ifneq ($(TARGET_BUILD_VARIANT),user)
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-endif
-#ccflags-y += -DCONFIG_MEM_PD
-ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
-ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
-ccflags-y += -DCONFIG_SDIO_INBAND_INT
-#ccflags-y += -DCONFIG_SDIO_INBAND_POLLING
-ccflags-y += -DCONFIG_SDIO_BLKSIZE_512
-#ccflags-y += -DCONFIG_SDIO_PWRSEQ
-
-all_dependencies += install
-endif
-
-ifeq ($(CFG_GK_WIFI_DEVICE_UWE5623_USB),y)
-#### add cflag ######
-ccflags-y += -DCONFIG_GOKE_BOARD
-#ccflags-y += -DCONFIG_WCN_PARSE_DTS
-#ccflags-y += -DCONFIG_WCN_CHIPEN
-#ccflags-y += -DCONFIG_WCN_RESET
-#ccflags-y += -DCONFIG_WCN_POWER_UP_DOWN
-#ccflags-y += -DCONFIG_WCN_INT_AP
-#ccflags-y += -DCONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
-#ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
-#ccflags-y += -DCONFIG_WL_WAKE_HOST_EN
-#ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
-#ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
-#ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-ccflags-y += -DCONFIG_SYS_REBOOT_NOT_REPOWER_USBCHIP
-ifneq ($(TARGET_BUILD_VARIANT),user)
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-endif
-
-all_dependencies += install
-endif
-
-### ---------- Goke end ---------- ###
-
 ### ---------- Hisilicon start ---------- ###
 ifeq ($(CFG_HI_WIFI_DEVICE_UWE5621),y)
 #### add cflag ######
@@ -295,18 +172,12 @@ ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
 #ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
 #ccflags-y += -DCONFIG_MEM_PD
-ifeq ($(CONFIG_WCN_SDIO),y)
-ifneq ($(TARGET_BUILD_VARIANT),user)
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-endif
 ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
 ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
 ccflags-y += -DCONFIG_SDIO_INBAND_INT
 #ccflags-y += -DCONFIG_SDIO_INBAND_POLLING
 ccflags-y += -DCONFIG_SDIO_BLKSIZE_512
 #ccflags-y += -DCONFIG_SDIO_PWRSEQ
-endif
 
 all_dependencies += install
 endif
@@ -324,10 +195,6 @@ ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
 ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
 #ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-ifneq ($(TARGET_BUILD_VARIANT),user)
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-endif
 #ccflags-y += -DCONFIG_MEM_PD
 ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
 ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
@@ -354,10 +221,6 @@ ccflags-y += -DCONFIG_HISI_BOARD
 #ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
 ccflags-y += -DCONFIG_SYS_REBOOT_NOT_REPOWER_USBCHIP
-ifneq ($(TARGET_BUILD_VARIANT),user)
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-endif
 
 all_dependencies += install
 endif
@@ -379,8 +242,6 @@ ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
 #ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
 #ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-#ccflags-y += -DCONFIG_WCN_LOOPCHECK
-#ccflags-y += -DCONFIG_CPLOG_DEBUG
 #ccflags-y += -DCONFIG_MEM_PD
 #ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
 #ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
@@ -409,10 +270,6 @@ ccflags-y += -DCONFIG_WCN_POWER_UP_DOWN
 #ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
 #ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-#ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ifneq ($(TARGET_BUILD_VARIANT),user)
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-endif
 #ccflags-y += -DCONFIG_MEM_PD
 #ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
 #ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
@@ -441,8 +298,33 @@ ccflags-y += -DCONFIG_AML_BOARD
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
 #ccflags-y += -DCONFIG_SYS_REBOOT_NOT_REPOWER_USBCHIP
 
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
+driver_dependencies += $(firmware_target)
+endif
+
+ifeq ($(CFG_AML_LINUX_WIFI_DEVICE_UWE5621),y)
+#### add cflag ######
+ccflags-y += -DCONFIG_AML_BOARD
+#ccflags-y += -DCONFIG_WCN_PARSE_DTS
+#ccflags-y += -DCONFIG_WCN_CHIPEN
+#ccflags-y += -DCONFIG_WCN_RESET
+#ccflags-y += -DCONFIG_WCN_RESET_PIN_CONNECTED
+ccflags-y += -DCONFIG_WCN_POWER_UP_DOWN
+ccflags-y += -DCONFIG_WCN_DOWNLOAD_FIRMWARE_FROM_HEX
+ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
+#ccflags-y += -DCONFIG_WL_WAKE_HOST_EN
+#ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
+#ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
+#ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
+#ccflags-y += -DCONFIG_MEM_PD
+#ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
+#ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
+#ccflags-y += -DCONFIG_SDIO_INBAND_INT
+ifeq ($(UNISOC_SDIO_IRQ_TYPE_CONFIG),)
+ccflags-y += -DCONFIG_CUSTOMIZE_SDIO_IRQ_TYPE=3
+endif
+#ccflags-y += -DCONFIG_SDIO_INBAND_POLLING
+ccflags-y += -DCONFIG_SDIO_BLKSIZE_512
+#ccflags-y += -DCONFIG_SDIO_PWRSEQ
 
 driver_dependencies += $(firmware_target)
 endif
@@ -457,10 +339,6 @@ ccflags-y += -DCONFIG_WCN_PARSE_DTS
 #ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
 #ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-ifneq ($(TARGET_BUILD_VARIANT),user)
-#ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-endif
 #ccflags-y += -DCONFIG_MEM_PD
 
 all_dependencies += install
@@ -474,10 +352,6 @@ ccflags-y += -DCONFIG_WCN_PARSE_DTS
 #ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
 #ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-ifneq ($(TARGET_BUILD_VARIANT),user)
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-endif
 #ccflags-y += -DCONFIG_MEM_PD
 
 all_dependencies += install
@@ -499,10 +373,6 @@ ccflags-y += -DCONFIG_WL_WAKE_HOST_EN
 #ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
 #ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-#ifneq ($(TARGET_BUILD_VARIANT),user)
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-#endif
 #ccflags-y += -DCONFIG_MEM_PD
 ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
 ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE
@@ -532,9 +402,6 @@ ccflags-y += -DCONFIG_MTK_BOARD
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
 ccflags-y += -DCONFIG_SYS_REBOOT_NOT_REPOWER_USBCHIP
 
-ccflags-y += -DCONFIG_WCN_LOOPCHECK
-ccflags-y += -DCONFIG_CPLOG_DEBUG
-
 all_dependencies += install
 endif
 
@@ -552,8 +419,6 @@ ccflags-y += -DCONFIG_BT_WAKE_HOST_EN
 #ccflags-y += -DCONFIG_WCN_RESUME_POWER_DOWN
 #ccflags-y += -DCONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 #ccflags-y += -DCONFIG_WCN_CHECK_MODULE_VENDOR
-#ccflags-y += -DCONFIG_WCN_LOOPCHECK
-#ccflags-y += -DCONFIG_CPLOG_DEBUG
 #ccflags-y += -DCONFIG_MEM_PD
 #ccflags-y += -DCONFIG_SDIO_TX_ADMA_MODE
 #ccflags-y += -DCONFIG_SDIO_RX_ADMA_MODE

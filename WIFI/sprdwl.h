@@ -206,14 +206,11 @@ struct sprdwl_channel_list {
 
 #ifdef CP2_RESET_SUPPORT
 struct sprlwl_drv_cp_sync {
-	char country[2];
 	unsigned char fw_stat[SPRDWL_MODE_MAX];
-	bool scan_not_allowed;
-	bool cmd_not_allowed;
+	bool cp2_reset_flag;
 	struct regulatory_request request;
-
 };
-#endif
+#endif /*CP2_RESET_SUPPORT*/
 
 struct sprdwl_priv {
 	struct wiphy *wiphy;
@@ -304,10 +301,11 @@ struct sprdwl_priv {
 #define OTT_NO_SUPT	(0)
 #define OTT_SUPT	(1)
 	unsigned char ott_supt;
+	__le32 extend_feature;
 
 #ifdef CP2_RESET_SUPPORT
 	struct sprlwl_drv_cp_sync sync;
-#endif
+#endif /*CP2_RESET_SUPPORT*/
 };
 
 struct sprdwl_eap_hdr {
@@ -365,7 +363,7 @@ extern struct device *sprdwl_dev;
 #define wl_trace(fmt, args...) \
 	do { \
 		if (sprdwl_debug_level >= L_ERR) \
-			pr_err("sprdwl:" fmt, ##args); \
+			trace_printk("sprdwl:" fmt, ##args); \
 	} while (0)
 
 #define wl_err_ratelimited(fmt, args...) \

@@ -124,4 +124,6 @@ void mdbg_assert_interface(char *str);
 int marlin_reset_callback_register(u32 subsys, struct notifier_block *nb);
 void marlin_reset_callback_unregister(u32 subsys, struct notifier_block *nb);
 int marlin_reset_notify_call(enum marlin_cp2_status sts);
+int chip_power_off(int subsys);
+int chip_power_on(int subsys);
 #endif

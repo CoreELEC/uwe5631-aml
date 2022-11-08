@@ -63,7 +63,6 @@ extern int wifi_irq_trigger_level(void);
 extern void extern_bt_set_enable(int is_on);
 #endif
 extern void extern_wifi_set_enable(int is_on);
-extern void set_usb_wifi_power(int is_power);
 #endif
 
 #ifdef CONFIG_GOKE_BOARD
@@ -113,18 +112,11 @@ struct gpio_config {
 #define RTL_REG_RST_GPIO (17)
 #endif
 
-#define WCN_FW_MAX_PATH_NUM	4
+#define WCN_FW_MAX_PATH_NUM	1
 /* path of cp2 firmware. */
-#ifdef CONFIG_CUSTOMIZE_UNISOC_FW_PATH
-#define UNISOC_FW_PATH_DEFAULT CONFIG_CUSTOMIZE_UNISOC_FW_PATH
-#else
-#define UNISOC_FW_PATH_DEFAULT "/system/etc/firmware/"
-#endif
+#define UNISOC_FW_PATH_DEFAULT "/lib/firmware/"
 static char *wcn_fw_path[WCN_FW_MAX_PATH_NUM] = {
-	UNISOC_FW_PATH_DEFAULT,		/* most of projects */
-	"/vendor/etc/firmware/",	/* allwinner h6/h616... */
-	"/lib/firmware/",		/* allwinner r328... */
-	"/vendor/firmware/"
+	UNISOC_FW_PATH_DEFAULT		/* most of projects */
 };
 
 #if defined(CONFIG_WCN_SDIO)
@@ -278,6 +270,9 @@ struct marlin_device {
 	struct delayed_work power_wq;
 	struct work_struct download_wq;
 	struct work_struct gnss_dl_wq;
+#ifndef CONFIG_CP2_ASSERT
+	struct work_struct cp2_reset_wq;
+#endif /*CONFIG_CP2_ASSERT*/
 	bool no_power_off;
 	bool wait_ge2;
 	bool is_btwf_in_sysfs;
@@ -1096,7 +1091,7 @@ static int marlin_request_firmware(struct marlin_firmware **mfirmware_p)
 			mfirmware->data = marlin_dev->firmware.data;
 			mfirmware->size = marlin_dev->firmware.size;
 			mfirmware->is_from_fs = 0;
-			mfirmware->is_from_hex = 0;
+			mfirmware->is_from_hex = 1;
 		}
 	} else {
 		/* NOTE! We canot guarantee the img is complete when we read it
@@ -2649,34 +2644,17 @@ static int chip_reset_release(int val)
 
 	return 0;
 }
-#ifdef CONFIG_AML_BOARD
-void marlin_wifi_power(bool on)
-{
-	static unsigned int chip_en_count;
-
-	if (on) {
-		if (chip_en_count == 0) {
-			set_usb_wifi_power(0);
-			set_usb_wifi_power(1);
-			WCN_INFO("marlin chip wifi power on\n");
-		}
-		chip_en_count++;
-	} else {
-		chip_en_count--;
-		if (chip_en_count == 0) {
-			set_usb_wifi_power(0);
-			WCN_INFO("marlin chip wifi power off\n");
-		}
-	}
-	return;
-}
-#endif
 void marlin_chip_en(bool enable, bool reset)
 {
 	static unsigned int chip_en_count;
 
 #ifdef CONFIG_AML_BOARD
-	if (enable) {
+	if (reset) {
+		extern_wifi_set_enable(0);
+		msleep(100);
+		extern_wifi_set_enable(1);
+		WCN_INFO("marlin gnss chip en reset\n");
+	} else if (enable) {
 		if (chip_en_count == 0) {
 			extern_wifi_set_enable(0);
 			msleep(100);
@@ -2695,7 +2673,12 @@ void marlin_chip_en(bool enable, bool reset)
 #endif
 
 #ifdef CONFIG_AW_BOARD
-	if (enable) {
+	if (reset) {
+		sunxi_wlan_set_power(0);
+		msleep(100);
+		sunxi_wlan_set_power(1);
+		WCN_INFO("marlin gnss chip en reset\n");
+	} else if (enable) {
 		if (chip_en_count == 0) {
 			sunxi_wlan_set_power(0);
 			msleep(100);
@@ -3037,6 +3020,37 @@ static void btwifi_download_fdl_firmware(void)
 }
 #endif
 
+#ifndef CONFIG_CP2_ASSERT
+static void marlin_cp2_reset_wq(struct work_struct *work)
+{
+	unsigned long power_state = 0;
+
+	WCN_INFO("%s, notify every subsystem reset start\n", __func__);
+	marlin_reset_notify_call(MARLIN_CP2_STS_ASSERTED);
+	sprdwcn_bus_set_carddump_status(false);
+
+	WCN_INFO("%s, chip reset start\n", __func__);
+	power_state = marlin_dev->power_state;
+	sprdwcn_bus_runtime_put();
+	chip_power_off(0xff);
+	msleep(100);
+	chip_power_on(0xff);
+	marlin_dev->power_state = power_state;
+	marlin_schedule_download_wq();
+	marlin_dev->wifi_need_download_ini_flag = 1;
+	WCN_INFO("%s, chip reset finish\n", __func__);
+
+	marlin_reset_notify_call(MARLIN_CP2_STS_READY);
+	WCN_INFO("%s, notify every subsystem  reset finish\n", __func__);
+}
+
+void marlin_cp2_reset(void)
+{
+	queue_work(system_highpri_wq, &marlin_dev->cp2_reset_wq);
+}
+EXPORT_SYMBOL_GPL(marlin_cp2_reset);
+#endif /*CONFIG_CP2_ASSERT*/
+
 static void pre_btwifi_download_sdio(struct work_struct *work)
 {
 #ifdef CONFIG_WCN_USB
@@ -3194,9 +3208,6 @@ int chip_power_on(int subsys)
 	marlin_avdd18_dcxo_enable(true);
 	marlin_clk_enable(true);
 	marlin_digital_power_enable(true);
-#ifdef CONFIG_AML_BOARD
-	marlin_wifi_power(true);
-#endif
 	marlin_chip_en(true, false);
 	msleep(20);
 	chip_reset_release(1);
@@ -3206,6 +3217,11 @@ int chip_power_on(int subsys)
 
 
 #ifndef CONFIG_WCN_PCIE
+#if defined(CONFIG_AML_BOARD) &&  defined(CONFIG_WCN_SDIO)
+	msleep(30);
+	marlin_chip_en(false, true);
+	msleep(30);
+#endif
 	sprdwcn_bus_rescan();
 	if (wait_for_completion_timeout(&marlin_dev->carddetect_done,
 		msecs_to_jiffies(CARD_DETECT_WAIT_MS)) == 0) {
@@ -3233,9 +3249,6 @@ int chip_power_off(int subsys)
 	marlin_avdd18_dcxo_enable(false);
 	marlin_clk_enable(false);
 	marlin_chip_en(false, false);
-#ifdef CONFIG_AML_BOARD
-	marlin_wifi_power(false);
-#endif
 	marlin_digital_power_enable(false);
 	marlin_analog_power_enable(false);
 	chip_reset_release(0);
@@ -3355,6 +3368,8 @@ EXPORT_SYMBOL_GPL(open_power_ctl);
 void marlin_schedule_download_wq(void)
 {
 	unsigned long timeleft;
+
+	reinit_completion(&marlin_dev->download_done);
 
 	marlin_dev->wifi_need_download_ini_flag = 0;
 	schedule_work(&marlin_dev->download_wq);
@@ -3938,6 +3953,9 @@ static int marlin_probe(struct platform_device *pdev)
 	chip_power_on(WCN_AUTO);
 #endif
 
+#ifndef CONFIG_CP2_ASSERT
+	INIT_WORK(&marlin_dev->cp2_reset_wq, marlin_cp2_reset_wq);
+#endif /*CONFIG_CP2_ASSERT*/
 	INIT_WORK(&marlin_dev->download_wq, pre_btwifi_download_sdio);
 	INIT_WORK(&marlin_dev->gnss_dl_wq, pre_gnss_download_firmware);
 	INIT_DELAYED_WORK(&marlin_dev->power_wq, marlin_power_wq);

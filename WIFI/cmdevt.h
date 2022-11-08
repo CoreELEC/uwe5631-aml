@@ -335,7 +335,12 @@ struct sprdwl_cmd_fw_info {
 #define TX_WITH_CREDIT	(0)
 #define TX_NO_CREDIT	(1)
 	unsigned char credit_capa;
-} __packed;
+#define SPRDWL_EXTEND_FEATURE_SAE          BIT(0)
+#define SPRDWL_EXTEND_FEATURE_OWE          BIT(1)
+#define SPRDWL_EXTEND_FEATURE_DPP          BIT(2)
+#define SPRDWL_EXTEND_8021X_SUITE_B_192    BIT(3)
+	__le32 extend_feature;
+} ;
 
 /* WIFI_CMD_OPEN */
 struct sprdwl_cmd_open {
@@ -400,6 +405,7 @@ struct sprdwl_cmd_set_ie {
 #define	SPRDWL_IE_ASSOC_RESP		4
 #define	SPRDWL_IE_BEACON_HEAD		5
 #define	SPRDWL_IE_BEACON_TAIL		6
+#define	SPRDWL_IE_SAE			7
 	u8 type;
 	__le16 len;
 	u8 data[0];

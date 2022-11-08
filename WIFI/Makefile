@@ -5,9 +5,7 @@ all_dependencies := driver
 ifneq ($(UNISOC_BSP_INCLUDE),)
 ccflags-y += -I$(UNISOC_BSP_INCLUDE)
 endif
-#add by amlogic
 ccflags-y += -I$(KERNEL_SRC)/$(M)/../BSP/include/
-
 ifneq ($(UNISOC_WIFI_CUS_CONFIG),)
 ccflags-y += -DCUSTOMIZE_WIFI_CFG_PATH=\"$(UNISOC_WIFI_CUS_CONFIG)\"
 endif
@@ -44,7 +42,7 @@ endif
 ccflags-y += -DSPLIT_STACK
 #ccflags-y += -DSPRD_RX_THREAD
 ccflags-y += -DOTT_UWE
-#ccflags-y += -DCP2_RESET_SUPPORT
+ccflags-y += -DCP2_RESET_SUPPORT
 ifeq ($(UNISOC_STA_SOFTAP_SCC_MODE),y)
 ccflags-y += -DSTA_SOFTAP_SCC_MODE
 endif
@@ -52,16 +50,16 @@ endif
 ccflags-y += -DPPPOE_LLC_SUPPORT
 #ccflags-y += -DSPRDWL_TX_SELF
 #ccflags-y += -DTCP_ACK_DROP_SUPPORT
-#ccflags-y += -DWOW_SUPPORT -DCONFIG_PM
+ccflags-y += -DWOW_SUPPORT
 #ccflags-y += -DCPUFREQ_UPDATE_SUPPORT
-
+#ccflags-y += -DCUSTOM_REGDOMAIN
 #####module name ###
 obj-m += $(MODULE_NAME).o
 
 #######add .o file#####
 $(MODULE_NAME)-objs += main.o cfg80211.o txrx.o cmdevt.o npi.o msg.o work.o vendor.o \
 				  tcp_ack.o mm.o reorder.o wl_core.o tx_msg.o rx_msg.o \
-				  wl_intf.o qos.o dbg_ini_util.o #reg_domain.o
+				  wl_intf.o qos.o dbg_ini_util.o reg_domain.o
 $(MODULE_NAME)-objs += defrag.o
 $(MODULE_NAME)-objs += ibss.o
 $(MODULE_NAME)-objs += nan.o
@@ -73,9 +71,7 @@ $(MODULE_NAME)-objs += rnd_mac_addr.o
 $(MODULE_NAME)-objs += debug.o
 #$(MODULE_NAME)-objs += 11h.o
 
-#add by amlogic
 M ?= $(shell pwd)
-
 all: $(all_dependencies)
 driver: $(driver_dependencies)
 	@echo build driver
@@ -86,6 +82,5 @@ clean:
 	$(RM) Module.markers
 	$(RM) modules.order
 
-#add by amlogic
 modules:
 	$(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KERNEL_SRC) M=$(M)  modules

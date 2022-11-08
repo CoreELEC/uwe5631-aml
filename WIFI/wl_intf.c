@@ -411,10 +411,8 @@ int sprdwl_intf_tx_list(struct sprdwl_intf *dev,
 	int tx_count_saved = tx_count;
 	int list_num;
 
-#ifdef CP2_RESET_SUPPORT
 	if(dev->cp_asserted ==1)
 		return 0;
-#endif
 
 	wl_debug("%s:%d tx_count is %d\n", __func__, __LINE__, tx_count);
 	list_num = get_list_num(tx_list);
@@ -1132,37 +1130,6 @@ static int intf_rx_handle(int chn, struct mbuf_t *head,
 	return 0;
 }
 
-#ifdef RX_NAPI
-static int intf_napi_rx_handle(int chn, struct mbuf_t *head,
-					struct mbuf_t *tail, int num)
-{
-	struct sprdwl_intf *intf = get_intf();
-	struct sprdwl_rx_if *rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
-	struct sprdwl_msg_buf *msg = NULL;
-
-	wl_info("%s: channel:%d head:%p tail:%p num:%d\n",
-		__func__, chn, head, tail, num);
-
-	/* FIXME: Should we use replace msg? */
-	msg = sprdwl_alloc_msg_buf(&rx_if->rx_data_list);
-	if (!msg) {
-		wl_err("%s: no msgbuf\n", __func__);
-		sprdwcn_bus_push_list(chn, head, tail, num);
-		return 0;
-	}
-
-	sprdwl_fill_msg(msg, NULL, (void *)head, num);
-	msg->fifo_id = chn;
-	msg->buffer_type = SPRDWL_DEFRAG_MEM;
-	msg->data = (void *)tail;
-
-	sprdwl_queue_msg_buf(msg, &rx_if->rx_data_list);
-	napi_schedule(&rx_if->napi_rx);
-
-	return 0;
-}
-#endif
-
 void sprdwl_handle_pop_list(void *data)
 {
 	int i;
@@ -1407,12 +1374,15 @@ int sprdwl_suspend_resume_handle(int chn, int mode)
 		if ((vif->mode == SPRDWL_MODE_STATION) && (vif->sm_state == SPRDWL_CONNECTED)
 			&& (sprdwcn_bus_get_wl_wake_host_en() == SPRDWL_NO_WAKE_HOST)) {
 			vif->suspend_resume_connect.reconnect_flag = true;
-			sprdwl_cfg80211_disconnect(priv->wiphy, vif->ndev, 0);
+			priv->is_suspending = 1;
+			sprdwl_cfg80211_disconnect(NULL, vif->ndev, 0);
 		}
 
 		/* if cp2 is wakeup, send power_down firstly */
-		if (intf->fw_power_down != 1)
+		if (intf->fw_power_down != 1) {
+			priv->is_suspending = 1;
 			sprdwl_fw_power_down_ack(vif->priv, vif->ctx_id);
+		}
 
 		getnstimeofday(&time);
 		intf->sleep_time = timespec_to_ns(&time);
@@ -1474,15 +1444,9 @@ struct mchn_ops_t sdio_hif_ops[] = {
 	INIT_INTF(SDIO_RX_PKT_LOG_PORT, 0, 0, 0,
 		  SPRDWL_MAX_DATA_RXLEN, 1, 0, 0, 0,
 		  intf_rx_handle, NULL, NULL, NULL),
-#ifdef RX_NAPI
-	INIT_INTF(SDIO_RX_DATA_PORT, 0, 0, 0,
-		  SPRDWL_MAX_DATA_RXLEN, 1, 0, 0, 0,
-		  intf_napi_rx_handle, NULL, NULL, NULL),
-#else
 	INIT_INTF(SDIO_RX_DATA_PORT, 0, 0, 0,
 		  SPRDWL_MAX_DATA_RXLEN, 1, 0, 0, 0,
 		  intf_rx_handle, NULL, NULL, NULL),
-#endif
 
 	/* TX INTF */
 	INIT_INTF(SDIO_TX_CMD_PORT, 0, 1, 0,
@@ -1521,15 +1485,9 @@ struct mchn_ops_t usb_hif_ops[] = {
 	INIT_INTF(USB_RX_PKT_LOG_PORT, 3, 0, 0,
 		  SPRDWL_MAX_DATA_RXLEN, 50, 0, 0, 0,
 		  intf_rx_handle, NULL, NULL, NULL),
-#ifndef RX_NAPI
 	INIT_INTF(USB_RX_DATA_PORT, 3, 0, 0,
 		  SPRDWL_MAX_DATA_RXLEN, 1000, 0, 0, 0,
 		  intf_rx_handle, NULL, NULL, NULL),
-#else
-	INIT_INTF(USB_RX_DATA_PORT, 3, 0, 0,
-		  SPRDWL_MAX_DATA_RXLEN, 300, 0, 0, 0,
-		  intf_napi_rx_handle, NULL, NULL, NULL),
-#endif
 
 	/* TX INTF */
 	INIT_INTF(USB_TX_CMD_PORT, 3, 1, 0,

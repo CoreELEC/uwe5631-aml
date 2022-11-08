@@ -175,7 +175,21 @@ static int mtty_recv(const unsigned char* buf, int count)
 
 static int sdio_data_transmit(uint8_t* data, size_t count)
 {
-    return bt_data_interface->write(data, count);
+    int i;
+    if(bt_data_interface == NULL){
+	pr_err("%s bt_data_interface is null,retry\n", __func__);
+	for (i = 0; i < 10; i++){
+		msleep(100);
+	   if(bt_data_interface != NULL){
+		break;
+	   }
+	}
+	if(bt_data_interface == NULL){
+	  pr_err("%s bt_data_interface is null,return\n", __func__);
+	  return -EBUSY;
+	}
+    }
+   return bt_data_interface->write(data, count);
 }
 
 static int mtty_write_plus(struct tty_struct* tty,
@@ -490,8 +504,8 @@ static ssize_t misc_node_show(struct device* dev,
 #if ALL_PER
 static DEVICE_ATTR(at, 00660, at_show, at_store);
 static DEVICE_ATTR(woble_set, 00660, woble_set_show, woble_set_store);
-static DEVICE_ATTR(ant_num, 00660, ant_num_show, 0);
-static DEVICE_ATTR(chipid, 00660, chipid_show, 0);
+static DEVICE_ATTR(ant_num, 00664, ant_num_show, 0);
+static DEVICE_ATTR(chipid, 00664, chipid_show, 0);
 static DEVICE_ATTR(misc_node, 00660, misc_node_show, misc_node_store);
 
 #pragma pop_macro("VERIFY_OCTAL_PERMISSIONS")
@@ -537,13 +551,76 @@ static void bt_lateresume(struct early_suspend* h)
 {
 
     if (early_flag == 0x22) {
-        resume_transfer_upper(resume_rxmsg, 7);      
+        resume_transfer_upper(resume_rxmsg, 7);
     }
     early_flag = 0x11;
     dis_cmd_flag = 0x11;
+    dis_flag =0 ;// 更新狀態
     pr_err("unisoc_lateresume\n"); //
 }
 #endif
+
+#ifdef CP2_RESET_SUPPORT
+static void bt_cp2_pre_reset(void) {
+	pr_err("%s: entry!\n", __func__);
+}
+
+static void bt_cp2_post_reset(void) {
+#define RESET_BUFSIZE 5
+
+	int ret = 0;
+	int block_size = RESET_BUFSIZE;
+	unsigned char reset_buf[RESET_BUFSIZE]= {0x04, 0xff, 0x02, 0x57, 0xa5};
+
+	pr_err("%s: reset callback coming\n", __func__);
+	if (mtty_dev != NULL) {
+		// if (!work_pending(&mtty_dev->bt_rx_work)) {
+		if (atomic_read(&mtty_dev->state) == MTTY_STATE_OPEN && (RESET_BUFSIZE > 0)) {
+			pr_err("%s tty_insert_flip_string", __func__);
+			while(ret < block_size){
+				pr_err("%s before tty_insert_flip_string ret: %d, len: %d\n",
+						__func__, ret, RESET_BUFSIZE);
+				ret = tty_insert_flip_string(mtty_dev->port,
+									(unsigned char *)reset_buf,
+									RESET_BUFSIZE);   // -BT_SDIO_HEAD_LEN
+				pr_err("%s ret: %d, len: %d\n", __func__, ret, RESET_BUFSIZE);
+				if (ret)
+					tty_flip_buffer_push(mtty_dev->port);
+				block_size = block_size - ret;
+				ret = 0;
+			}
+		}
+	}
+}
+
+
+int bt_cp2_reset_callback(struct notifier_block *nb, unsigned long event, void *v) {
+	if (!v) {
+		pr_err("%s: v is NULL\n", __func__);
+		return NOTIFY_BAD;
+	}
+
+	pr_err("%s: %s %d\n", __func__, (char *)v, (int)event);
+
+	switch(event) {
+		case MARLIN_CP2_STS_ASSERTED:
+			bt_cp2_pre_reset();
+			break;
+		case MARLIN_CP2_STS_READY:
+			bt_cp2_post_reset();
+			break;
+		default:
+			pr_err("%s: parameter error event: %d\n", __func__, (int)event);
+			return NOTIFY_BAD;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block bt_cp2_reset_notifier = {
+	.notifier_call = bt_cp2_reset_callback,
+};
+#endif  /*CP2_RESET_SUPPORT*/
 
 static int mtty_probe(struct platform_device* pdev)
 {
@@ -610,6 +687,9 @@ static int mtty_probe(struct platform_device* pdev)
     bt_data_interface_cb.size = sizeof(struct bt_data_interface_cb_t);
     bt_data_interface_cb.recv = mtty_recv;
     bt_data_interface = get_marlin_sdio_interface();
+    if(bt_data_interface == NULL){
+      pr_err("%s bt_data_interface is null\n", __func__);
+    }
     bt_data_interface->init(&bt_data_interface_cb);
 
 /********************************************/
@@ -621,6 +701,10 @@ static int mtty_probe(struct platform_device* pdev)
     register_early_suspend(&bt_early_suspend);
 #endif
 /********************************************/
+
+#ifdef CP2_RESET_SUPPORT
+		marlin_reset_callback_register(MARLIN_BLUETOOTH, &bt_cp2_reset_notifier);
+#endif  /*CP2_RESET_SUPPORT*/
 
     return 0;
 }

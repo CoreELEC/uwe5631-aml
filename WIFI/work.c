@@ -61,6 +61,7 @@ static void sprdwl_do_work(struct work_struct *work)
 	struct sprdwl_vif *vif;
 	struct sprdwl_ba_event_data *ba_data;
 	struct sprdwl_priv *priv = container_of(work, struct sprdwl_priv, work);
+	struct sprdwl_intf *intf = (struct sprdwl_intf *)(priv->hw_priv);
 
 	while (1) {
 		sprdwl_work = sprdwl_get_work(priv);
@@ -144,7 +145,8 @@ static void sprdwl_do_work(struct work_struct *work)
 					sprdwl_work->data, sprdwl_work->len);
 			break;
 		case SPRDWL_WORK_FW_PWR_DOWN:
-			sprdwl_fw_power_down_ack(vif->priv, vif->ctx_id);
+			if (intf->fw_power_down != 1)
+				sprdwl_fw_power_down_ack(vif->priv, vif->ctx_id);
 			break;
 		case SPRDWL_WORK_HOST_WAKEUP_FW:
 			sprdwl_cmd_host_wakeup_fw(vif->priv, vif->ctx_id);

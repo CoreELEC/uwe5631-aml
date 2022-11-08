@@ -19,6 +19,9 @@ ccflags-y += -I$(KERNEL_SRC)/../vendor/wifi_driver/unisoc/uwe5621/BSP/include
 ccflags-y += -DWOBLE_TYPE="\"demo\""
 #ccflags-y += -DUNISOC_AMLOGIC_SUSPEND
 
+# support assert bt reset
+# ccflags-y += -DCP2_RESET_SUPPORT
+
 sprdbt_tty-objs := \
 	tty.o \
 	rfkill.o \

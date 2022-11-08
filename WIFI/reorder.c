@@ -84,12 +84,7 @@ reorder_set_skb_list(struct sprdwl_rx_ba_entry *ba_entry,
 	spin_unlock_bh(&ba_entry->skb_list_lock);
 }
 
-#ifdef SPLIT_STACK
 struct sk_buff *reorder_get_skb_list(struct sprdwl_rx_ba_entry *ba_entry)
-#else
-static inline struct sk_buff
-*reorder_get_skb_list(struct sprdwl_rx_ba_entry *ba_entry)
-#endif
 {
 	struct sk_buff *skb = NULL;
 
@@ -584,7 +579,7 @@ void reset_pn(struct sprdwl_priv *priv, const u8 *mac_addr)
 	}
 }
 
-struct sk_buff *reorder_data_process(struct sprdwl_rx_ba_entry *ba_entry,
+void reorder_data_process(struct sprdwl_rx_ba_entry *ba_entry,
 				     struct sk_buff *pskb)
 {
 	struct rx_ba_node *ba_node = NULL;
@@ -610,12 +605,6 @@ struct sk_buff *reorder_data_process(struct sprdwl_rx_ba_entry *ba_entry,
 			reorder_set_skb_list(ba_entry, pskb, pskb);
 		}
 	}
-
-#ifdef SPLIT_STACK
-	return NULL;
-#else
-	return reorder_get_skb_list(ba_entry);
-#endif
 }
 
 static void wlan_filter_event(struct sprdwl_rx_ba_entry *ba_entry,
@@ -794,7 +783,7 @@ static int wlan_addba_event(struct sprdwl_rx_ba_entry *ba_entry,
 	spin_lock_bh(&ba_node->ba_node_lock);
 #ifdef CP2_RESET_SUPPORT
 	ba_node->active = 0;
-#endif
+#endif /*CP2_RESET_SUPPORT*/
 	if (likely(!ba_node->active)) {
 		set_ba_node_desc(ba_node->rx_ba, win_start, win_size,
 				 INDEX_SIZE_MASK(index_size));
@@ -963,7 +952,6 @@ static void ba_reorder_timeout(unsigned long data)
 	if (ba_entry->skb_head) {
 		spin_unlock_bh(&ba_entry->skb_list_lock);
 
-#ifndef RX_NAPI
 #ifdef SPRD_RX_THREAD
 		rx_up(rx_if);
 #else
@@ -971,9 +959,6 @@ static void ba_reorder_timeout(unsigned long data)
 			wl_info("%s: queue rx workqueue\n", __func__);
 			queue_work(rx_if->rx_queue, &rx_if->rx_work);
 		}
-#endif
-#else
-		napi_schedule(&rx_if->napi_rx);
 #endif
 	} else {
 		spin_unlock_bh(&ba_entry->skb_list_lock);

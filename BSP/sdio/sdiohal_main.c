@@ -44,6 +44,7 @@
 extern int wifi_irq_num(void);
 extern int wifi_irq_trigger_level(void);
 extern void sdio_reinit(void);
+extern void sdio_clk_always_on(int on);
 extern void sdio_set_max_regs(unsigned int size);
 #endif
 
@@ -1558,6 +1559,9 @@ static void sdiohal_shutdown(struct device *dev)
 	}
 
 #ifdef CONFIG_WCN_SLP
+#ifndef CONFIG_WCN_TXRX_NSLP
+	slp_mgr_drv_sleep(SUBSYS_MAX, true);
+#endif
 	sdio_wait_pub_int_done();
 	sdio_record_power_notify(false);
 #endif
@@ -1629,6 +1633,9 @@ static int sdiohal_suspend(struct device *dev)
 	}
 
 #ifdef CONFIG_WCN_SLP
+#ifndef CONFIG_WCN_TXRX_NSLP
+	slp_mgr_drv_sleep(SUBSYS_MAX, true);
+#endif
 	sdio_wait_pub_int_done();
 	sdio_record_power_notify(false);
 #endif
@@ -1719,6 +1726,20 @@ static int sdiohal_resume(struct device *dev)
 	atomic_set(&p_data->flag_resume, 1);
 	if (!WCN_CARD_EXIST(&p_data->xmit_cnt))
 		atomic_sub(SDIOHAL_REMOVE_CARD_VAL, &p_data->xmit_cnt);
+
+#if (defined CONFIG_WCN_SLP) && (!defined CONFIG_WCN_TXRX_NSLP)
+#ifdef CONFIG_AML_BOARD
+	udelay(500);
+	sdio_clk_always_on(1);
+	udelay(900);
+#endif
+	slp_mgr_wakeup(SUBSYS_MAX);
+#ifdef CONFIG_AML_BOARD
+	udelay(500);
+	sdio_clk_always_on(0);
+	udelay(500);
+#endif
+#endif
 
 #ifdef CONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 	/* After resume will reset sdio reg, re-enable sdio int. */

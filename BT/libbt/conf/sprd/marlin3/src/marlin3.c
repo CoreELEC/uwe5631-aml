@@ -26,6 +26,8 @@
 #include "bt_vendor_sprd_hci.h"
 #include "conf.h"
 #include "upio.h"
+#include <stdio.h>
+#include <unistd.h>
 
 // pskey file structure default value
 static pskey_config_t marlin3_pskey;
@@ -423,16 +425,222 @@ static void marlin3_epilog_process() {
     hw_core_enable(0);
 }
 
+/******/
+static int rfkill_id_test = -1;
+static char rfkill_state_path_test[128] = {0};
+
+static int init_rfkill_test()
+{
+    char path[64] = {0};
+    char buf[32] = {0};
+    int fd, sz, id;
+
+    for (id = 0; id < 5 ; id++)
+    {
+        snprintf(path, sizeof(path), "/sys/class/rfkill/rfkill%d/name", id);
+        ALOGE("%s:path==%s\n", __func__,path);
+        fd = open(path, O_RDONLY);
+
+        if (fd < 0)
+        {
+            ALOGE("%s : open(%s) failed: %s (%d)", __func__, path, strerror(errno), errno);
+            continue;
+        }
+        memset(buf, 0, sizeof(buf));
+        sz = read(fd, buf, sizeof(buf));
+        close(fd);
+        if (sz >= 9 && memcmp(buf, "bluetooth", 9) == 0)
+        {
+            rfkill_id_test = id;
+            ALOGE("%s : select path %s\n", __func__, path);
+            break;
+        }
+        else
+        {
+            buf[sizeof(buf) - 1] = 0;
+            ALOGE("%s: %s is not match %s\n", __func__, path, buf);
+        }
+    }
+
+
+    snprintf(rfkill_state_path_test, sizeof(rfkill_state_path_test), "/sys/class/rfkill/rfkill%d/state", rfkill_id_test);
+    ALOGE("rfkill_state_path=%s\n",rfkill_state_path_test);
+
+    if (rfkill_id_test < 0)
+    {
+        ALOGE("init_rfkill_test : not found\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+
+
+static int upio_set_bluetooth_power_test(void)
+{
+
+    int sz;
+    int fd = -1;
+    int ret = -1;
+    char buffer = '1';
+    if (rfkill_id_test == -1)
+    {
+        if (init_rfkill_test())
+        {
+            return ret;
+        }
+    }
+    fd = open(rfkill_state_path_test, O_WRONLY);
+
+    if (fd < 0)
+    {
+        ALOGE("set_bluetooth_power : open(%s) for write failed: %s (%d)", rfkill_state_path_test, strerror(errno), errno);
+        return ret;
+    }
+
+    sz = write(fd, &buffer, 1);
+    if (sz < 0)
+    {
+        ALOGE("set_bluetooth_power : write(%s) failed: %s (%d)", rfkill_state_path_test, strerror(errno), errno);
+        close(fd);
+        return sz;
+    }
+    else
+    {
+        close(fd);
+    }
+
+    return 0;
+}
+
+
+/*****/
+#define UNISOC_BT_INI_PATH "/vendor/etc"
+#define UNISOC_BT_NODE_DIR "/sys/devices/platform/mtty.0/"
+#define UNISOC_BT_NODE_DIR_OLD "/sys/devices/platform/mtty/"
+typedef enum wcn_chip_model_for_kernel
+{
+    WCN_CHIP_INVALID,
+    WCN_CHIP_MARLIN3,
+    WCN_CHIP_MARLIN3L,
+    WCN_CHIP_MARLIN3E,
+}WCN_CHIP_MODEL_FOR_KERNEL;
+
+typedef struct
+{
+    WCN_CHIP_MODEL_FOR_KERNEL model;
+    char file[64];
+}WCN_CHIP_INI_MAP;
 
 static int marlin3_init(void) {
     int ret;
     char ssp_property[128] = {0};
 
+    int ant_num = 0, fd = -1;
+    int chipid = WCN_CHIP_INVALID;
+    char node_buf[32] = {0};
+    char etc_path_final[128] = {0};
+    char driver_node_file[64] = {0}, *driver_node_path = NULL;
+
+    const WCN_CHIP_INI_MAP ini_map[] =
+    {
+        {WCN_CHIP_INVALID, "invaild"},
+        {WCN_CHIP_MARLIN3, "marlin3"},
+        {WCN_CHIP_MARLIN3L, "marlin3lite"},
+        {WCN_CHIP_MARLIN3E, "marlin3e"},
+    };
+
     ALOGI("%s", __func__);
     memset(&marlin3_pskey, 0, sizeof(marlin3_pskey));
     memset(&marlin3_rf_config, 0, sizeof(marlin3_rf_config));
-    vnd_load_configure("/vendor/etc/bt_configure_pskey.ini", &marlin3_pksey_table[0]);
-    vnd_load_configure("/vendor/etc/bt_configure_rf.ini", &marlin3_rf_table[0]);
+
+    //vnd_load_configure("/vendor/etc/bt_configure_pskey.ini", &marlin3_pksey_table[0]);
+    //vnd_load_configure("/vendor/etc/bt_configure_rf.ini", &marlin3_rf_table[0]);
+    vnd_load_configure(UNISOC_BT_INI_PATH "/bt_configure_pskey.ini", &marlin3_pksey_table[0]);
+    upio_set_bluetooth_power_test();  //rfkill power
+    driver_node_path = UNISOC_BT_NODE_DIR;
+    if (access(driver_node_path, X_OK) != 0)
+    {
+      //BTE("%s access err %s %d %s", __func__, driver_node_path, errno, strerror(errno));
+       ALOGE("file_path_changed_%s", __func__);
+       driver_node_path = UNISOC_BT_NODE_DIR_OLD;
+
+       if (access(driver_node_path, X_OK) != 0)
+       {
+
+           ALOGE("%s UNISOC_BT_NODE_DIR_old", __func__);
+           return -1;
+       }
+    }
+
+    ALOGE("%s select %s", __func__, driver_node_path);
+
+    memset(driver_node_file, 0, sizeof(driver_node_file));
+    strcpy(driver_node_file, driver_node_path);
+    strcat(driver_node_file, "ant_num");
+    fd = open(driver_node_file, O_RDONLY);
+    if(fd < 0)
+    {
+          ALOGE("%s open ant_num err", __func__);
+         // BTE("%s open %s err %d %s", __func__, driver_node_file, errno, strerror(errno));
+          return -1;
+    }
+    else
+    {
+        ret = read(fd, node_buf, sizeof(node_buf));
+        if(ret <= 0)
+        {
+            ALOGE("%s read ant_num err %d %d", __func__, ret, errno);
+            return -1;
+        }
+        else
+        {
+            ant_num = atoi(node_buf);
+           //ÌìÏßÊýÊ¶±ð
+            ALOGI("%s read ant_num %s int %d", __func__, node_buf, ant_num);
+        }
+        close(fd);
+    }
+
+     memset(driver_node_file, 0, sizeof(driver_node_file));
+     strcpy(driver_node_file, driver_node_path);
+     strcat(driver_node_file, "chipid");
+     ALOGE("unisoc_%s open chipid", __func__);
+     fd = open(driver_node_file, O_RDONLY);
+     if(fd < 0)
+     {
+        ALOGE("%s open chipid err %d", __func__, errno);
+        return -1;
+     }
+     else
+     {
+        ret = read(fd, node_buf, sizeof(node_buf));
+        if(ret <= 0)
+        {
+            ALOGE("%s read chipid err %d %d", __func__, ret, errno);
+            return -1;
+        }
+        else
+        {
+            //chipid Ê¶±ð
+
+            chipid = atoi(node_buf);
+
+            ALOGI("unisoc_%s read chipid %s int %d", __func__, node_buf, chipid);
+         }
+         close(fd);
+
+     }
+
+
+    sprintf(etc_path_final, "%s/bt_configure_rf_%s_%d.ini", UNISOC_BT_INI_PATH, ini_map[chipid].file, ant_num);
+    //sprintf(etc_path_final, "%s/bt_configure_rf_%s_%d.ini", UNISOC_BT_INI_PATH, "marlin3", ant_num);
+
+    ALOGE("gy_rf_path-%s__path=%s", __func__, etc_path_final);
+    vnd_load_configure(etc_path_final, &marlin3_rf_table[0]);
+
+
 
     set_mac_address(marlin3_pskey.device_addr);
 

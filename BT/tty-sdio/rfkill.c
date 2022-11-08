@@ -63,15 +63,15 @@ int bluetooth_set_power(void *data, bool blocked)
     return 0;
 }
 
-static int bluetooth_set_power_dryrun(void *data, bool blocked)
-{
-    pr_err("%s: blocked %d data 0x%p\n", __func__, blocked, data);
-    return 0;
-}
+//static int bluetooth_set_power_dryrun(void *data, bool blocked)
+//{
+    //pr_err("%s: blocked %d data 0x%p\n", __func__, blocked, data);
+    //return 0;
+//}
 
 static struct rfkill_ops rfkill_bluetooth_ops =
 {
-    .set_block = bluetooth_set_power_dryrun,
+    .set_block = bluetooth_set_power,
 };
 
 int rfkill_bluetooth_init(struct platform_device *pdev)

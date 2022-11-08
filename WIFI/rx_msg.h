@@ -51,9 +51,9 @@ struct sprdwl_rx_if {
 	struct workqueue_struct *rx_queue;
 #endif
 #ifdef RX_NAPI
-	struct sprdwl_msg_list rx_data_list;
+	struct sk_buff_head napi_rx_list;
 	struct napi_struct napi_rx;
-#endif
+#endif/*RX_NAPI*/
 
 	struct sprdwl_mm mm_entry;
 	struct sprdwl_rx_ba_entry ba_entry;
@@ -267,7 +267,9 @@ void sprdwl_rx_process(struct sprdwl_rx_if *rx_if, struct sk_buff *pskb);
 void sprdwl_rx_send_cmd(struct sprdwl_intf *intf, void *data, int len,
 			unsigned char id, unsigned char ctx_id);
 int sprdwl_pkt_log_save(struct sprdwl_intf *intf, void *data);
+#ifdef RX_NAPI
 void sprdwl_rx_napi_init(struct net_device *ndev, struct sprdwl_intf *intf);
+#endif/*RX_NAPI*/
 #ifdef SPRD_RX_THREAD
 void rx_up(struct sprdwl_rx_if* rx_if);
 #endif
