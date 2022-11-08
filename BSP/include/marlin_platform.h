@@ -126,4 +126,15 @@ void marlin_reset_callback_unregister(u32 subsys, struct notifier_block *nb);
 int marlin_reset_notify_call(enum marlin_cp2_status sts);
 int chip_power_off(int subsys);
 int chip_power_on(int subsys);
+
+#ifdef CONFIG_WCN_USB
+void marlin_schedule_usb_hotplug(void);
+int marlin_probe_status(void);
+int marlin_get_usb_hotplug_status(void);
+void marlin_set_usb_hotplug_status(int status);
+void marlin_set_usb_reset_status(int status);
+int marlin_get_usb_reset_status(void);
+extern struct completion wcn_usb_rst_fdl_done;
+#endif
+
 #endif

@@ -38,9 +38,10 @@
 #include "mdbg_type.h"
 #include "wcn_parn_parser.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)
 #define ROOT_PATH "/"
 #define ETC_PATH "/etc"
-#define VENDOR_ETC_PATH "/etc"
+#define VENDOR_ETC_PATH "/vendor/etc"
 #define ETC_FSTAB "/etc/fstab"
 #define FSTAB_PATH_NUM 3
 #define CONF_COMMENT '#'
@@ -204,4 +205,10 @@ int parse_firmware_path(char *firmware_path)
 
 	return ret;
 }
+#else/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)*/
+int parse_firmware_path(char *firmware_path)
+{
+	return -1;
+}
+#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)*/
 

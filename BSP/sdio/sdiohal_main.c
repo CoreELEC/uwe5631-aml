@@ -35,7 +35,11 @@
 #include "wcn_glb.h"
 
 #if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
+#ifdef CONFIG_GK6323AB
+extern int mmc_sdio_set_detect(int sdio_det);
+#else
 #include "mach/hardware.h"
+#endif
 #endif
 
 #ifdef CONFIG_AML_BOARD
@@ -2000,6 +2004,13 @@ void sdiohal_reset(bool full_reset)
 #endif
 
 #if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
+#ifdef CONFIG_GK6323AB
+void sdiohal_set_card_present(bool enable)
+{
+	sdiohal_info("%s enable:%d\n", __func__, enable);
+	mmc_sdio_set_detect(enable);
+}
+#else
 #define REG_BASE_CTRL __io_address(0xf8a20008)
 void sdiohal_set_card_present(bool enable)
 {
@@ -2015,6 +2026,7 @@ void sdiohal_set_card_present(bool enable)
 		regval &= ~0x1;
 	writel(regval, REG_BASE_CTRL);
 }
+#endif
 #endif
 
 static int sdiohal_probe(struct sdio_func *func,

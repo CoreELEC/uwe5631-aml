@@ -48,6 +48,7 @@ set_ba_node_desc(struct rx_ba_node_desc *ba_node_desc,
 {
 	ba_node_desc->win_size = win_size;
 	ba_node_desc->win_start = win_start;
+	ba_node_desc->win_start_init = win_start;
 	ba_node_desc->win_limit = SEQNO_ADD(ba_node_desc->win_start,
 					    (ba_node_desc->win_size - 1));
 	ba_node_desc->win_tail = SEQNO_SUB(ba_node_desc->win_start, 1);
@@ -370,6 +371,7 @@ static int reorder_msdu(struct sprdwl_rx_ba_entry *ba_entry,
 	struct rx_ba_node_desc *ba_node_desc = ba_node->rx_ba;
 
 	if (seqno_geq(seq_num, ba_node_desc->win_start)) {
+		ba_node_desc->win_start_init = 0;
 		if (!seqno_leq(seq_num, ba_node_desc->win_limit)) {
 			/* Buffer is full, send data now */
 			greater_than_seqhi(ba_entry, ba_node_desc, seq_num);
@@ -378,6 +380,12 @@ static int reorder_msdu(struct sprdwl_rx_ba_entry *ba_entry,
 		ret = insert_msdu(msdu_desc, skb, ba_node_desc);
 		if (!ret && seqno_geq(seq_num, ba_node_desc->win_tail))
 			ba_node_desc->win_tail = seq_num;
+	} else if (!seqno_geq(seq_num, ba_node_desc->win_start_init)) {
+		wl_info("%s: seq_num: %d is less than win_start_init: %d\n",
+		       __func__, seq_num, ba_node_desc->win_start_init);
+
+		reorder_set_skb_list(ba_entry, skb, skb);
+		ret = 0;
 	} else {
 		wl_debug("%s: seq_num: %d is less than win_start: %d\n",
 		       __func__, seq_num, ba_node_desc->win_start);
@@ -413,6 +421,7 @@ static void reorder_msdu_process(struct sprdwl_rx_ba_entry *ba_entry,
 		/* FIXME: Data come in sequence in default */
 		if ((seq_num == ba_node_desc->win_start) &&
 		    !ba_node_desc->buff_cnt && last_msdu_flag) {
+			ba_node_desc->win_start_init = 0;
 			send_order_msdu(ba_entry, msdu_desc, skb, ba_node_desc);
 			goto out;
 		}
@@ -926,6 +935,7 @@ static void ba_reorder_timeout(unsigned long data)
 	spin_lock_bh(&ba_node->ba_node_lock);
 	if (ba_node->active && ba_node_desc->buff_cnt &&
 	    !timer_pending(&ba_node->reorder_timer)) {
+		ba_node_desc->win_start_init = 0;
 		pos_seqno = get_first_seqno_in_buff(ba_node_desc);
 		send_msdu_with_gap(ba_entry, ba_node_desc, pos_seqno);
 		ba_node_desc->win_start = pos_seqno;

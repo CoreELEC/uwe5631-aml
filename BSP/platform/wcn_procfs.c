@@ -110,7 +110,21 @@ void mdbg_assert_interface(char *str)
 	wake_up_interruptible(&mdbg_proc->assert.rxwait);
 #else /*CONFIG_CP2_ASSERT*/
 	WCN_INFO("mdbg_assert_interface:%s\n", (char *)str);
+#ifdef CONFIG_WCN_SDIO
 	marlin_cp2_reset();
+#endif
+
+#ifdef CONFIG_WCN_USB
+	reinit_completion(&wcn_usb_rst_fdl_done);
+	marlin_set_usb_reset_status(1);
+	marlin_reset_reg();
+	if (wait_for_completion_timeout(&wcn_usb_rst_fdl_done,
+					msecs_to_jiffies(3000)) == 0) {
+		WCN_ERR("reset download fdl timeout\n");
+		return;
+	}
+	marlin_reset_reg();
+#endif
 #endif /*CONFIG_CP2_ASSERT*/
 
 }
@@ -164,7 +178,21 @@ static int mdbg_assert_read(int channel, struct mbuf_t *head,
 #else /*CONFIG_CP2_ASSERT*/
 	WCN_INFO("mdbg_assert_read:%s\n", (char *)(head->buf + PUB_HEAD_RSV));
 	sprdwcn_bus_push_list(channel, head, tail, num);
+#ifdef CONFIG_WCN_SDIO
 	marlin_cp2_reset();
+#endif
+
+#ifdef CONFIG_WCN_USB
+	reinit_completion(&wcn_usb_rst_fdl_done);
+	marlin_set_usb_reset_status(1);
+	marlin_reset_reg();
+	if (wait_for_completion_timeout(&wcn_usb_rst_fdl_done,
+					msecs_to_jiffies(3000)) == 0) {
+		WCN_ERR("reset download fdl timeout\n");
+		return -1;
+	}
+	marlin_reset_reg();
+#endif
 #endif /*CONFIG_CP2_ASSERT*/
 
 	return 0;

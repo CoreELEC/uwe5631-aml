@@ -27,6 +27,7 @@ struct rx_ba_pkt {
 };
 
 struct rx_ba_node_desc {
+	unsigned short win_start_init;
 	unsigned short win_start;
 	unsigned short win_limit;
 	unsigned short win_tail;

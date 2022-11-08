@@ -35,12 +35,12 @@ ccflags-y += -DTCPACK_DELAY_SUPPORT
 #ccflags-y += -DTCPACK_DROP_DYNAMIC
 
 #ccflags-y += -DDFS_MASTER
-#ccflags-y += -DRX_NAPI
+ccflags-y += -DRX_NAPI
 ifneq ($(TARGET_BUILD_VARIANT),user)
 ccflags-y += -DWL_CONFIG_DEBUG
 endif
-ccflags-y += -DSPLIT_STACK
-#ccflags-y += -DSPRD_RX_THREAD
+#ccflags-y += -DSPLIT_STACK
+ccflags-y += -DSPRD_RX_THREAD
 ccflags-y += -DOTT_UWE
 ccflags-y += -DCP2_RESET_SUPPORT
 ifeq ($(UNISOC_STA_SOFTAP_SCC_MODE),y)

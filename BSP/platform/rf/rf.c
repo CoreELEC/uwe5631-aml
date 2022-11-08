@@ -22,15 +22,15 @@
 #include "rf.h"
 #include "wcn_integrate.h"
 
-#define SYSTEM_WIFI_CONFIG_FILE "/system/etc/connectivity_configure.ini"
-#define SYSTEM_WIFI_CALI_FILE "/system/etc/connectivity_calibration.ini"
-#define VENDOR_WIFI_CONFIG_FILE "/vendor/etc/connectivity_configure.ini"
-#define VENDOR_WIFI_CALI_FILE "/vendor/etc/connectivity_calibration.ini"
-#define VENDOR_WIFI_CONFIG_AD_FILE "/vendor/etc/wcn/connectivity_configure.ini"
-#define SYSTEM_WIFI_CONFIG_AD_FILE "/system/etc/wcn/connectivity_configure.ini"
-#define VENDOR_WIFI_CALI_AD_FILE "/vendor/etc/wcn/connectivity_calibration.ini"
-#define SYSTEM_WIFI_CALI_AD_FILE "/system/etc/wcn/connectivity_calibration.ini"
-#define WIFI_CALI_DUMP_FILE "/mnt/vendor/wcn/connectivity_calibration_bak.ini"
+#define SYSTEM_WIFI_CONFIG_FILE "/etc/connectivity_configure.ini"
+#define SYSTEM_WIFI_CALI_FILE "/etc/connectivity_calibration.ini"
+#define VENDOR_WIFI_CONFIG_FILE "/etc/connectivity_configure.ini"
+#define VENDOR_WIFI_CALI_FILE "/etc/connectivity_calibration.ini"
+#define VENDOR_WIFI_CONFIG_AD_FILE "/etc/wcn/connectivity_configure.ini"
+#define SYSTEM_WIFI_CONFIG_AD_FILE "/etc/wcn/connectivity_configure.ini"
+#define VENDOR_WIFI_CALI_AD_FILE "/etc/wcn/connectivity_calibration.ini"
+#define SYSTEM_WIFI_CALI_AD_FILE "/etc/wcn/connectivity_calibration.ini"
+#define WIFI_CALI_DUMP_FILE "/etc/connectivity_calibration_bak.ini"
 
 #define CONF_TYPE 1
 #define CALI_TYPE 2

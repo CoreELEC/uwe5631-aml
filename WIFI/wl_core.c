@@ -605,7 +605,10 @@ static void sprdwl_cp2_pre_reset(void) {
 
 	sprdwl_reorder_deinit(&rx_if->ba_entry);
 	sprdwl_flush_all_txlist(tx_msg);
+
+#ifndef SPRD_RX_THREAD
 	flush_workqueue(rx_if->rx_queue);
+#endif
 
 	list_for_each_entry_safe(vif, tmp_vif, &g_sprdwl_priv->vif_list, vif_node) {
 		g_sprdwl_priv->sync.fw_stat[vif->mode] =  g_sprdwl_priv->fw_stat[vif->mode];

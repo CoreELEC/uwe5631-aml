@@ -80,12 +80,25 @@ static void sprdwl_do_work(struct work_struct *work)
 					      reg_mgmt->type,
 					      reg_mgmt->reg ? 1 : 0);
 			break;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)
 		case SPRDWL_WORK_DEAUTH:
 		case SPRDWL_WORK_DISASSOC:
 			cfg80211_rx_unprot_mlme_mgmt(vif->ndev,
 						     sprdwl_work->data,
 						     sprdwl_work->len);
 			break;
+#else
+		case SPRDWL_WORK_DEAUTH:
+			cfg80211_send_unprot_deauth(vif->ndev,
+						     sprdwl_work->data,
+						     sprdwl_work->len);
+			break;
+		case SPRDWL_WORK_DISASSOC:
+			cfg80211_send_unprot_disassoc(vif->ndev,
+						     sprdwl_work->data,
+						     sprdwl_work->len);
+			break;
+#endif
 		case SPRDWL_WORK_MC_FILTER:
 			if (vif->mc_filter->mc_change)
 				sprdwl_set_mc_filter(priv, vif->ctx_id,

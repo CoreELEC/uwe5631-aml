@@ -1491,7 +1491,7 @@ struct mchn_ops_t usb_hif_ops[] = {
 
 	/* TX INTF */
 	INIT_INTF(USB_TX_CMD_PORT, 3, 1, 0,
-		  SPRDWL_MAX_CMD_TXLEN, 20, 0, 0, 0,
+		  SPRDWL_MAX_CMD_TXLEN, 100, 0, 0, 0,
 		  sprdwl_tx_cmd_pop_list, NULL, NULL,
 		  sprdwl_suspend_resume_handle),
 	INIT_INTF(USB_TX_DATA_PORT, 3, 1, 0,

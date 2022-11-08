@@ -39,7 +39,7 @@
 
 static struct file *gnss_dump_file;
 static	loff_t pos;
-#define GNSS_MEMDUMP_PATH			"/data/vendor/gnss/gnssdump.mem"
+#define GNSS_MEMDUMP_PATH			"/storage/gnssdump.mem"
 
 #ifndef CONFIG_SC2342_INTEG
 struct gnss_mem_dump {

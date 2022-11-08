@@ -59,6 +59,10 @@
 #define SPRDWL_GET_LE32(addr)		le32_to_cpu((addr))
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0)
+#define ether_addr_copy(dst, src) memcpy(dst, src, ETH_ALEN)
+#endif
+
 /* the max length between data_head and net data */
 #define SPRDWL_SKB_HEAD_RESERV_LEN	16
 #define SPRDWL_COUNTRY_CODE_LEN		2

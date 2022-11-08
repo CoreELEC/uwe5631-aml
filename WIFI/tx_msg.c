@@ -33,6 +33,7 @@
 #include "cmdevt.h"
 #include "debug.h"
 #include <linux/kthread.h>
+#include <uapi/linux/sched/types.h>
 
 struct sprdwl_msg_buf *sprdwl_get_msg_buf(void *pdev,
 					  enum sprdwl_head_type type,
@@ -1327,11 +1328,14 @@ static int sprdwl_tx_work_queue(void *data)
 	enum sprdwl_mode mode = SPRDWL_MODE_NONE;
 	int send_num = 0;
 	struct sprdwl_priv *priv;
+	struct sched_param param;
 
 	tx_msg = (struct sprdwl_tx_msg *)data;
 	intf = tx_msg->intf;
 	priv = intf->priv;
-	set_user_nice(current, -20);
+
+	param.sched_priority = 1;
+	sched_setscheduler(current, SCHED_FIFO, &param);
 
 	while (1) {
 		tx_down(tx_msg);

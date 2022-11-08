@@ -1046,7 +1046,12 @@ static int sprdwl_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev)
 }
 
 static int sprdwl_cfg80211_add_station(struct wiphy *wiphy,
-				       struct net_device *ndev, const u8 *mac,
+				       struct net_device *ndev,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+					   const u8 *mac,
+#else
+					   u8 *mac,
+#endif
 				       struct station_parameters *params)
 {
 	return 0;
@@ -1056,8 +1061,10 @@ static int sprdwl_cfg80211_del_station(struct wiphy *wiphy,
 				       struct net_device *ndev,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 83)
 					   struct station_del_parameters *params
-#else
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
 					   const u8 *mac
+#else
+					   u8 *mac
 #endif
 					)
 
@@ -1089,7 +1096,12 @@ out:
 
 static int
 sprdwl_cfg80211_change_station(struct wiphy *wiphy,
-			       struct net_device *ndev, const u8 *mac,
+			       struct net_device *ndev,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+				   const u8 *mac,
+#else
+				   u8 *mac,
+#endif
 			       struct station_parameters *params)
 {
 	return 0;
@@ -1169,7 +1181,12 @@ out:
 
 #else
 static int sprdwl_cfg80211_get_station(struct wiphy *wiphy,
-				       struct net_device *ndev, const u8 *mac,
+				       struct net_device *ndev,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+					   const u8 *mac,
+#else
+					   u8 *mac,
+#endif
 				       struct station_info *sinfo)
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
@@ -3004,11 +3021,24 @@ static void sprdwl_cfg80211_stop_p2p_device(struct wiphy *wiphy,
 		sprdwl_scan_done(vif, true);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
 static int sprdwl_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 				     struct net_device *ndev, const u8 *peer,
 				     u8 action_code, u8 dialog_token,
 				     u16 status_code,  u32 peer_capability,
 				     bool initiator, const u8 *buf, size_t len)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+static int sprdwl_cfg80211_tdls_mgmt(struct wiphy *wiphy,
+					 struct net_device *ndev, const u8 *peer,
+				     u8 action_code, u8 dialog_token,
+				     u16 status_code,  u32 peer_capability,
+				     const u8 *buf, size_t len)
+#else
+static int sprdwl_cfg80211_tdls_mgmt(struct wiphy *wiphy,
+					 struct net_device *ndev, u8 *peer,
+				     u8 action_code, u8 dialog_token,
+				     u16 status_code, const u8 *buf, size_t len)
+#endif
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 	struct sk_buff *tdls_skb;
@@ -3096,7 +3126,12 @@ static int sprdwl_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 }
 
 static int sprdwl_cfg80211_tdls_oper(struct wiphy *wiphy,
-				     struct net_device *ndev, const u8 *peer,
+				     struct net_device *ndev,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+					 const u8 *peer,
+#else
+					 u8 *peer,
+#endif
 				     enum nl80211_tdls_operation oper)
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
@@ -3207,6 +3242,7 @@ int sprdwl_cfg80211_update_ft_ies(struct wiphy *wiphy, struct net_device *ndev,
 				       ftie->ie, ftie->ie_len);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 static int sprdwl_cfg80211_set_qos_map(struct wiphy *wiphy,
 				       struct net_device *ndev,
 				       struct cfg80211_qos_map *qos_map)
@@ -3217,6 +3253,7 @@ static int sprdwl_cfg80211_set_qos_map(struct wiphy *wiphy,
 
 	return sprdwl_set_qos_map(vif->priv, vif->ctx_id, (void *)qos_map);
 }
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
 static int sprdwl_cfg80211_add_tx_ts(struct wiphy *wiphy,
@@ -3367,7 +3404,9 @@ out:
 #ifdef WOW_SUPPORT
 static void sprdwl_set_wakeup(struct wiphy *wiphy, bool enabled)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)
 	struct cfg80211_wowlan *cfg = wiphy->wowlan_config;
+#endif
 	struct sprdwl_priv *priv = wiphy_priv(wiphy);
 
 	if (!enabled) {
@@ -3376,6 +3415,7 @@ static void sprdwl_set_wakeup(struct wiphy *wiphy, bool enabled)
 		return;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)
 	if (cfg->any) {
 		wl_debug("%s: any\n", __func__);
 		sprdwl_set_wowlan(priv, SPRDWL_WOWLAN_ANY, NULL, 0);
@@ -3391,6 +3431,7 @@ static void sprdwl_set_wakeup(struct wiphy *wiphy, bool enabled)
 		wl_debug("%s: disconnect\n", __func__);
 		sprdwl_set_wowlan(priv, SPRDWL_WOWLAN_DISCONNECT, NULL, 0);
 	}
+#endif
 }
 #endif /*WOW_SUPPORT*/
 
@@ -3915,7 +3956,7 @@ void sprdwl_setup_wiphy(struct wiphy *wiphy, struct sprdwl_priv *priv)
 
 #ifdef WOW_SUPPORT
 	/* Set WoWLAN flags */
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 11, 0)
 	wiphy->wowlan = &sprdwl_wowlan_support;
 #else
 	memcpy(&wiphy->wowlan, &sprdwl_wowlan_support, sizeof(struct wiphy_wowlan_support));

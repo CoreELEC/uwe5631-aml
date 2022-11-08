@@ -28,6 +28,9 @@
 #include "tcp_ack.h"
 #include <linux/kthread.h>
 
+#include <linux/version.h>
+//#include <linux/sched.h>
+#include <uapi/linux/sched/types.h>
 #ifdef RX_HW_CSUM
 bool mh_ipv6_ext_hdr(unsigned char nexthdr)
 {
@@ -152,37 +155,33 @@ void rx_up(struct sprdwl_rx_if *rx_if)
 #endif
 void sprdwl_rx_process(struct sprdwl_rx_if *rx_if, struct sk_buff *pskb)
 {
-#ifndef SPLIT_STACK
-#ifndef RX_NAPI
-	struct sprdwl_priv *priv = rx_if->intf->priv;
-#endif/*RX_NAPI*/
 	struct sk_buff *reorder_skb = NULL, *skb = NULL;
-#endif/*SPLIT_STACK*/
 
 	/* TODO: Add rx mh data process */
 	reorder_data_process(&rx_if->ba_entry, pskb);
-
-#ifdef SPLIT_STACK
-	if (!work_pending(&rx_if->rx_net_work))
-		queue_work(rx_if->rx_net_workq, &rx_if->rx_net_work);
-#else/*SPLIT_STACK*/
 	reorder_skb = reorder_get_skb_list(&rx_if->ba_entry);
 	while (reorder_skb) {
 		SPRDWL_GET_FIRST_SKB(skb, reorder_skb);
 		skb = defrag_data_process(&rx_if->defrag_entry, skb);
-		if (skb) {
-#ifdef RX_NAPI
-			skb_queue_tail(&rx_if->napi_rx_list, skb);
-#else/*RX_NAPI*/
-			sprdwl_rx_skb_process(priv, skb);
-#endif/*RX_NAPI*/
-		}
+		if (skb)
+			skb_queue_tail(&rx_if->net_rx_list, skb);
 	}
-#ifdef RX_NAPI
-	if (!skb_queue_empty(&rx_if->napi_rx_list))
-		napi_schedule(&rx_if->napi_rx);
-#endif/*RX_NAPI*/
+
+	if (!skb_queue_empty(&rx_if->net_rx_list)) {
+#if defined RX_NAPI
+		if (rx_if->napi_rx_enable)
+			napi_schedule(&rx_if->napi_rx);
+#elif defined SPLIT_STACK
+		if (!work_pending(&rx_if->rx_net_work))
+			queue_work(rx_if->rx_net_workq, &rx_if->rx_net_work);
+#else/*SPLIT_STACK*/
+		while (!skb_queue_empty(&rx_if->net_rx_list)) {
+			skb = skb_dequeue(&rx_if->net_rx_list);
+			if (skb)
+				sprdwl_rx_skb_process(rx_if->intf->priv, skb);
+		}
 #endif/*SPLIT_STACK*/
+	}
 }
 
 static inline void
@@ -215,15 +214,13 @@ void sprdwl_rx_net_work_queue(struct work_struct *work)
 {
 	struct sprdwl_rx_if *rx_if;
 	struct sprdwl_priv *priv;
-	struct sk_buff *reorder_skb = NULL, *skb = NULL;
+	struct sk_buff *skb = NULL;
 
 	rx_if = container_of(work, struct sprdwl_rx_if, rx_net_work);
 	priv = rx_if->intf->priv;
 
-	reorder_skb = reorder_get_skb_list(&rx_if->ba_entry);
-	while (reorder_skb) {
-		SPRDWL_GET_FIRST_SKB(skb, reorder_skb);
-		skb = defrag_data_process(&rx_if->defrag_entry, skb);
+	while (!skb_queue_empty(&rx_if->net_rx_list)) {
+		skb = skb_dequeue(&rx_if->net_rx_list);
 		if (skb)
 			sprdwl_rx_skb_process(priv, skb);
 	}
@@ -244,6 +241,7 @@ static void sprdwl_rx_work_queue(struct work_struct *work)
 	/*struct sprdwl_vif *vif;
 	struct sprdwl_cmd_hdr *hdr;*/
 #ifdef SPRD_RX_THREAD
+	struct sched_param param;
 	rx_if = (struct sprdwl_rx_if *)arg;
 #else
 	rx_if = container_of(work, struct sprdwl_rx_if, rx_work);
@@ -252,7 +250,8 @@ static void sprdwl_rx_work_queue(struct work_struct *work)
 	priv = intf->priv;
 
 #ifdef SPRD_RX_THREAD
-	set_user_nice(current, -20);
+	param.sched_priority = 1;
+	sched_setscheduler(current, SCHED_FIFO, &param);
 	while(1) {
 		rx_down(rx_if);
 		if(intf->exit)
@@ -507,8 +506,8 @@ static int sprdwl_netdev_poll_rx(struct napi_struct *napi, int budget)
 	rx_if = container_of(napi, struct sprdwl_rx_if, napi_rx);
 	priv = rx_if->intf->priv;
 
-	while ((work_done < budget) && (!skb_queue_empty(&rx_if->napi_rx_list))) {
-		skb = skb_dequeue(&rx_if->napi_rx_list);
+	while ((work_done < budget) && (!skb_queue_empty(&rx_if->net_rx_list))) {
+		skb = skb_dequeue(&rx_if->net_rx_list);
 		if (skb)
 			sprdwl_rx_skb_process(priv, skb);
 
@@ -517,7 +516,7 @@ static int sprdwl_netdev_poll_rx(struct napi_struct *napi, int budget)
 
 	if (work_done < budget) {
 		napi_complete(napi);
-		if (!skb_queue_empty(&rx_if->napi_rx_list))
+		if ((rx_if->napi_rx_enable) && (!skb_queue_empty(&rx_if->net_rx_list)))
 			napi_schedule(napi);
 	}
 
@@ -529,8 +528,17 @@ void sprdwl_rx_napi_init(struct net_device *ndev, struct sprdwl_intf *intf)
 	struct sprdwl_rx_if *rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
 
 	netif_napi_add(ndev, &rx_if->napi_rx, sprdwl_netdev_poll_rx, 128);
-	skb_queue_head_init(&rx_if->napi_rx_list);
 	napi_enable(&rx_if->napi_rx);
+	rx_if->napi_rx_enable = true;
+}
+
+void sprdwl_rx_napi_deinit(struct sprdwl_intf *intf)
+{
+	struct sprdwl_rx_if *rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
+
+	rx_if->napi_rx_enable = false;
+	napi_disable(&rx_if->napi_rx);
+	netif_napi_del(&rx_if->napi_rx);
 }
 #endif/*RX_NAPI*/
 
@@ -605,6 +613,7 @@ int sprdwl_rx_init(struct sprdwl_intf *intf)
 	}
 
 	sprdwl_reorder_init(&rx_if->ba_entry);
+	skb_queue_head_init(&rx_if->net_rx_list);
 
 	intf->lp = 0;
 	intf->sprdwl_rx = (void *)rx_if;
@@ -641,9 +650,7 @@ err_rx_if:
 int sprdwl_rx_deinit(struct sprdwl_intf *intf)
 {
 	struct sprdwl_rx_if *rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
-#ifdef RX_NAPI
 	struct sk_buff *skb;
-#endif/*RX_NAPI*/
 
 #ifdef SPRD_RX_THREAD
 	if (rx_if->rx_thread) {
@@ -667,12 +674,9 @@ int sprdwl_rx_deinit(struct sprdwl_intf *intf)
 #endif
 
 	sprdwl_msg_deinit(&rx_if->rx_list);
-#ifdef RX_NAPI
-	napi_disable(&rx_if->napi_rx);
-	while ((skb = skb_dequeue(&rx_if->napi_rx_list)) != NULL)
+
+	while ((skb = skb_dequeue(&rx_if->net_rx_list)) != NULL)
 		kfree_skb(skb);
-	netif_napi_del(&rx_if->napi_rx);
-#endif/*RX_NAPI*/
 
 	sprdwl_defrag_deinit(&rx_if->defrag_entry);
 	sprdwl_mm_deinit(&rx_if->mm_entry, intf);

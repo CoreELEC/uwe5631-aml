@@ -50,9 +50,10 @@ struct sprdwl_rx_if {
 	struct work_struct rx_work;
 	struct workqueue_struct *rx_queue;
 #endif
+	struct sk_buff_head net_rx_list;
 #ifdef RX_NAPI
-	struct sk_buff_head napi_rx_list;
 	struct napi_struct napi_rx;
+	bool napi_rx_enable;
 #endif/*RX_NAPI*/
 
 	struct sprdwl_mm mm_entry;
@@ -269,6 +270,7 @@ void sprdwl_rx_send_cmd(struct sprdwl_intf *intf, void *data, int len,
 int sprdwl_pkt_log_save(struct sprdwl_intf *intf, void *data);
 #ifdef RX_NAPI
 void sprdwl_rx_napi_init(struct net_device *ndev, struct sprdwl_intf *intf);
+void sprdwl_rx_napi_deinit(struct sprdwl_intf *intf);
 #endif/*RX_NAPI*/
 #ifdef SPRD_RX_THREAD
 void rx_up(struct sprdwl_rx_if* rx_if);
