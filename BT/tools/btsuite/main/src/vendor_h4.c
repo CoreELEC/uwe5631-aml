@@ -58,7 +58,7 @@ static thread_t *thread; // Not owned by us
 #define RESPONSE_LENGTH 100
 
 
-static const char *VENDOR_LIBRARY_NAME = "libbt-vendor.so";
+static const char *VENDOR_LIBRARY_NAME = "libbt-vendor_uwe.so";
 static const char *VENDOR_LIBRARY_SYMBOL_NAME = "BLUETOOTH_VENDOR_LIB_INTERFACE";
 
 static void *lib_handle;

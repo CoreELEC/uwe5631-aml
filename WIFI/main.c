@@ -109,10 +109,9 @@ void sprdwl_netif_rx(struct sk_buff *skb, struct net_device *ndev)
 	local_bh_disable();
 	netif_receive_skb(skb);
 	local_bh_enable();
-#else
-	skb_orphan(skb);
+#else/*RX_NAPI*/
 	napi_gro_receive(&rx_if->napi_rx, skb);
-#endif
+#endif/*RX_NAPI*/
 }
 
 void sprdwl_stop_net(struct sprdwl_vif *vif)
@@ -230,6 +229,14 @@ static netdev_tx_t sprdwl_start_xmit(struct sk_buff *skb, struct net_device *nde
 
 	if (intf->cp_asserted == 1 ||
 		intf->suspend_mode != SPRDWL_PS_RESUMED) {
+		dev_kfree_skb(skb);
+		return NETDEV_TX_OK;
+	}
+
+	if (vif->mode == SPRDWL_MODE_STATION && vif->sm_state != SPRDWL_CONNECTED) {
+		wl_info("%s, %d, sta is not connect, should not send this data\n", __func__, __LINE__);
+		wl_hex_dump(L_INFO, "TX packet: ", DUMP_PREFIX_OFFSET,
+			     16, 1, skb->data, skb->len, 0);
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
@@ -1582,7 +1589,7 @@ static struct sprdwl_vif *sprdwl_register_netdev(struct sprdwl_priv *priv,
 #endif
 #ifdef RX_NAPI
 	ndev->features |= NETIF_F_GRO;
-#endif
+#endif/*RX_NAPI*/
 	ndev->features |= NETIF_F_SG;
 	SET_NETDEV_DEV(ndev, wiphy_dev(priv->wiphy));
 
@@ -1755,9 +1762,8 @@ int sprdwl_core_init(struct device *dev, struct sprdwl_priv *priv)
 #endif
 
 #ifdef RX_NAPI
-	sprdwl_rx_napi_init(wdev->netdev,
-			    ((struct sprdwl_intf *)priv->hw_priv));
-#endif
+	sprdwl_rx_napi_init(wdev->netdev, ((struct sprdwl_intf *)priv->hw_priv));
+#endif/*RX_NAPI*/
 
 #if defined(UWE5621_FTR)
 	qos_enable(1);
@@ -1797,6 +1803,9 @@ int sprdwl_core_deinit(struct sprdwl_priv *priv)
 #if defined(UWE5621_FTR)
 	qos_enable(0);
 #endif
+#ifdef RX_NAPI
+	sprdwl_rx_napi_deinit((struct sprdwl_intf *)priv->hw_priv);
+#endif/*RX_NAPI*/
 	sprdwl_del_all_ifaces(priv);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 	sprdwl_vendor_deinit(priv->wiphy);

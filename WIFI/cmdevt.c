@@ -268,11 +268,6 @@ int sprdwl_cmd_init(void)
 		return -EINVAL;
 	}
 
-#ifdef CP2_RESET_SUPPORT
-	if(atomic_read(&cmd->refcnt) >= SPRDWL_CMD_EXIT_VAL)
-		atomic_set(&cmd->refcnt, 0);
-#endif
-
 	spin_lock_init(&cmd->lock);
 	mutex_init(&cmd->cmd_lock);
 	init_completion(&cmd->completed);
@@ -335,20 +330,12 @@ void sprdwl_cmd_deinit(void)
 	mutex_destroy(&cmd->cmd_lock);
 	if (cmd->wake_lock)
 		wakeup_source_unregister(cmd->wake_lock);
-#ifdef CP2_RESET_SUPPORT
-	cmd->init_ok = 0;
-#endif
 }
 
 extern struct sprdwl_intf_ops g_intf_ops;
 static int sprdwl_cmd_lock(struct sprdwl_cmd *cmd)
 {
 	struct sprdwl_intf *intf = (struct sprdwl_intf *)g_intf_ops.intf;
-
-#ifdef CP2_RESET_SUPPORT
-	if(!unlikely(cmd->init_ok))
-		return -1;
-#endif
 
 	if (atomic_inc_return(&cmd->refcnt) >= SPRDWL_CMD_EXIT_VAL) {
 		atomic_dec(&cmd->refcnt);
@@ -358,7 +345,7 @@ static int sprdwl_cmd_lock(struct sprdwl_cmd *cmd)
 		return -1;
 	}
 	mutex_lock(&cmd->cmd_lock);
-	if (intf->priv->is_suspending == 0)
+	if ((intf->priv->is_suspending == 0) && (sprdwcn_bus_get_wl_wake_host_en() == SPRDWL_WAKE_HOST))
 		__pm_stay_awake(cmd->wake_lock);
 
 	if (SPRDWL_PS_SUSPENDED == intf->suspend_mode) {
@@ -376,14 +363,9 @@ static void sprdwl_cmd_unlock(struct sprdwl_cmd *cmd)
 {
 	struct sprdwl_intf *intf = (struct sprdwl_intf *)g_intf_ops.intf;
 
-#ifdef CP2_RESET_SUPPORT
-	if(!unlikely(cmd->init_ok))
-		return;
-#endif
-
 	mutex_unlock(&cmd->cmd_lock);
 	atomic_dec(&cmd->refcnt);
-	if (intf->priv->is_suspending == 0)
+	if ((intf->priv->is_suspending == 0) && (sprdwcn_bus_get_wl_wake_host_en() == SPRDWL_WAKE_HOST))
 		__pm_relax(cmd->wake_lock);
 	if (intf->priv->is_suspending == 1)
 		intf->priv->is_suspending = 0;
@@ -407,9 +389,8 @@ struct sprdwl_msg_buf *__sprdwl_cmd_getbuf(struct sprdwl_priv *priv,
 		return NULL;
 
 #ifdef CP2_RESET_SUPPORT
-	if((g_sprdwl_priv->sync.scan_not_allowed == true) &&
-	   (g_sprdwl_priv->sync.cmd_not_allowed == false) ) {
-		if((cmd_id != WIFI_CMD_SYNC_VERSION) && 
+	if(g_sprdwl_priv->sync.cp2_reset_flag == true) {
+		if((cmd_id != WIFI_CMD_SYNC_VERSION) &&
 		   (cmd_id != WIFI_CMD_DOWNLOAD_INI) &&
 		   (cmd_id != WIFI_CMD_GET_INFO) &&
 		   (cmd_id != WIFI_CMD_OPEN) &&
@@ -417,7 +398,7 @@ struct sprdwl_msg_buf *__sprdwl_cmd_getbuf(struct sprdwl_priv *priv,
 			   return NULL;
 		}
 	}
-#endif
+#endif /*CP2_RESET_SUPPORT*/
 
 	if (cmd_id >= WIFI_CMD_OPEN) {
 		vif = ctx_id_to_vif(priv, ctx_id);
@@ -558,7 +539,10 @@ static int sprdwl_atcmd_assert(struct sprdwl_priv *priv, u8 vif_ctx_id, u8 cmd_i
 
 		mdbg_assert_interface(buf);
 		sprdwl_net_flowcontrl(priv, SPRDWL_MODE_NONE, false);
+
+#ifndef CP2_RESET_SUPPORT
 		intf->exit = 1;
+#endif /*CP2_RESET_SUPPORT*/
 
 		return 1;
 	} else {
@@ -622,16 +606,9 @@ int sprdwl_cmd_send_recv(struct sprdwl_priv *priv,
 
 	ret = sprdwl_timeout_recv_rsp(priv, timeout);
 
-#ifdef CP2_RESET_SUPPORT
-	if(true == priv->sync.cmd_not_allowed) {
-		if(unlikely(cmd->init_ok))
-			sprdwl_cmd_unlock(cmd);
-
-		return 0;
-	}
-#endif
-
-	if (ret != -1) {
+	if(intf->cp_asserted == 1) {
+		wl_err("%s, cp_asserted:%d\n", __func__, intf->cp_asserted);
+	} else if (ret != -1) {
 		if (rbuf && rlen && *rlen) {
 			hdr = (struct sprdwl_cmd_hdr *)cmd->data;
 			plen = le16_to_cpu(hdr->plen) - sizeof(*hdr);
@@ -958,6 +935,7 @@ int sprdwl_get_fw_info(struct sprdwl_priv *priv)
 		priv->fw_ver = p->fw_version;
 		priv->fw_capa = p->fw_capa;
 		priv->fw_std = p->fw_std;
+		priv->extend_feature = p->extend_feature;
 		priv->max_ap_assoc_sta = p->max_ap_assoc_sta;
 		priv->max_acl_mac_addrs = p->max_acl_mac_addrs;
 		priv->max_mc_mac_addrs = p->max_mc_mac_addrs;
@@ -1045,9 +1023,9 @@ out:
 			wl_err("mac_addr:%02x:%02x:%02x:%02x:%02x:%02x\n",
 				priv->mac_addr[0], priv->mac_addr[1], priv->mac_addr[2],
 				priv->mac_addr[3], priv->mac_addr[4], priv->mac_addr[5]);
-		wl_err("credit_capa:%s\n",
+		wl_err("credit_capa:%s, extend_feature:0x%x\n",
 			(priv->credit_capa == TX_WITH_CREDIT) ?
-			"TX_WITH_CREDIT" : "TX_NO_CREDIT");
+			"TX_WITH_CREDIT" : "TX_NO_CREDIT", priv->extend_feature);
 		wl_err("ott support:%d\n", priv->ott_supt);
 	}
 
@@ -1268,6 +1246,7 @@ int sprdwl_set_ie(struct sprdwl_priv *priv, u8 vif_ctx_id, u8 type,
 {
 	struct sprdwl_msg_buf *msg;
 	struct sprdwl_cmd_set_ie *p;
+	int i = 0;
 
 	msg = sprdwl_cmd_getbuf(priv, sizeof(*p) + len, vif_ctx_id,
 				SPRDWL_HEAD_RSP, WIFI_CMD_SET_IE);
@@ -1278,6 +1257,21 @@ int sprdwl_set_ie(struct sprdwl_priv *priv, u8 vif_ctx_id, u8 type,
 	p->type = type;
 	p->len = len;
 	memcpy(p->data, ie, len);
+
+	/*set ext cap ie bit80-bit87 to 0, otherwise connect fail*/
+	if (type == SPRDWL_IE_ASSOC_REQ) {
+		i = 0;
+		while (i < len) {
+			if (p->data[i] == 0x7f) {
+				if (p->data[i+1] >= 0x0b) {
+					p->data[i+12] = 0x00;
+				}
+				break;
+			}
+			i += (p->data[i+1] + 2);
+		}
+		wl_hex_dump(L_DBG, "ASSOC IE: ", DUMP_PREFIX_OFFSET, 16, 1, p->data, len, 0);
+	}
 
 	return sprdwl_cmd_send_recv(priv, msg, CMD_WAIT_TIMEOUT, NULL, NULL);
 }
@@ -3709,7 +3703,7 @@ int sprdwl_set_wowlan(struct sprdwl_priv *priv, int subcmd, void *pad, int pad_l
 	cmd->sub_cmd_id = subcmd;
 	cmd->pad_len = pad_len;
 
-	wl_debug("%s subcmd = %d, len = %d\n", __func__, cmd->sub_cmd_id, cmd->pad_len);
+	wl_info("%s subcmd = %d, len = %d\n", __func__, cmd->sub_cmd_id, cmd->pad_len);
 	if (pad_len)
 		memcpy(cmd->pad, pad, pad_len);
 
@@ -3721,6 +3715,7 @@ int sprdwl_sync_disconnect_event(struct sprdwl_vif *vif, unsigned int timeout)
 	int ret = 0;
 
 	reinit_completion(&vif->disconnect_completed);
+	vif->priv->is_suspending = 1;
 	sprdwl_cmd_lock(&g_sprdwl_cmd);
 	ret = wait_for_completion_timeout(&vif->disconnect_completed, timeout);
 	sprdwl_cmd_unlock(&g_sprdwl_cmd);

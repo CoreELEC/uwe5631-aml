@@ -38,8 +38,6 @@
 #include "marlin_platform.h"
 
 
-#define CONFIG_CP2_ASSERT       (1)
-
 u32 wcn_print_level = WCN_DEBUG_OFF;
 
 static u32 g_dumpmem_switch =  1;
@@ -79,6 +77,7 @@ unsigned char *mdbg_get_at_cmd_buf(void)
 
 void mdbg_assert_interface(char *str)
 {
+#ifdef CONFIG_CP2_ASSERT
 	int len = MDBG_ASSERT_SIZE;
 
 	if (strlen(str) <= MDBG_ASSERT_SIZE)
@@ -94,7 +93,6 @@ void mdbg_assert_interface(char *str)
 	stop_loopcheck();
 #endif
 
-#if(CONFIG_CP2_ASSERT)
 	memset(mdbg_proc->assert.buf, 0, MDBG_ASSERT_SIZE);
 	strncpy(mdbg_proc->assert.buf, str, len);
 	WCN_INFO("mdbg_assert_interface:%s\n",
@@ -106,16 +104,28 @@ void mdbg_assert_interface(char *str)
 	mdbg_dump_mem();
 #endif
 	wcnlog_clear_log();
-	mdbg_proc->assert.rcv_len = strlen(str);
+	mdbg_proc->assert.rcv_len = len;
 	mdbg_proc->fail_count++;
 	complete(&mdbg_proc->assert.completed);
 	wake_up_interruptible(&mdbg_proc->assert.rxwait);
-#else
-	WCN_ERR("%s,%s reset & notify...\n", __func__, str);
-	marlin_reset_notify_call(MARLIN_CP2_STS_ASSERTED);
-	msleep(1000);
-	marlin_reset_notify_call(MARLIN_CP2_STS_READY);
+#else /*CONFIG_CP2_ASSERT*/
+	WCN_INFO("mdbg_assert_interface:%s\n", (char *)str);
+#ifdef CONFIG_WCN_SDIO
+	marlin_cp2_reset();
 #endif
+
+#ifdef CONFIG_WCN_USB
+	reinit_completion(&wcn_usb_rst_fdl_done);
+	marlin_set_usb_reset_status(1);
+	marlin_reset_reg();
+	if (wait_for_completion_timeout(&wcn_usb_rst_fdl_done,
+					msecs_to_jiffies(3000)) == 0) {
+		WCN_ERR("reset download fdl timeout\n");
+		return;
+	}
+	marlin_reset_reg();
+#endif
+#endif /*CONFIG_CP2_ASSERT*/
 
 }
 EXPORT_SYMBOL_GPL(mdbg_assert_interface);
@@ -140,8 +150,9 @@ static unsigned int mdbg_mbuf_get_datalength(struct mbuf_t *mbuf)
 static int mdbg_assert_read(int channel, struct mbuf_t *head,
 		     struct mbuf_t *tail, int num)
 {
+#ifdef CONFIG_CP2_ASSERT
 	unsigned int data_length;
-#if (CONFIG_CP2_ASSERT)
+
 	data_length = mdbg_mbuf_get_datalength(head);
 	if (data_length > MDBG_ASSERT_SIZE) {
 		WCN_ERR("assert data len:%d,beyond max read:%d",
@@ -164,17 +175,26 @@ static int mdbg_assert_read(int channel, struct mbuf_t *head,
 	complete(&mdbg_proc->assert.completed);
 	wake_up_interruptible(&mdbg_proc->assert.rxwait);
 	sprdwcn_bus_push_list(channel, head, tail, num);
+#else /*CONFIG_CP2_ASSERT*/
+	WCN_INFO("mdbg_assert_read:%s\n", (char *)(head->buf + PUB_HEAD_RSV));
+	sprdwcn_bus_push_list(channel, head, tail, num);
+#ifdef CONFIG_WCN_SDIO
+	marlin_cp2_reset();
+#endif
 
-#else
-		sprdwcn_bus_push_list(channel, head, tail, num);
-#ifdef CONFIG_WCN_LOOPCHECK
-		stop_loopcheck();
+#ifdef CONFIG_WCN_USB
+	reinit_completion(&wcn_usb_rst_fdl_done);
+	marlin_set_usb_reset_status(1);
+	marlin_reset_reg();
+	if (wait_for_completion_timeout(&wcn_usb_rst_fdl_done,
+					msecs_to_jiffies(3000)) == 0) {
+		WCN_ERR("reset download fdl timeout\n");
+		return -1;
+	}
+	marlin_reset_reg();
 #endif
-		WCN_ERR("chip reset & notify every subsystem...\n");
-		marlin_reset_notify_call(MARLIN_CP2_STS_ASSERTED);
-		msleep(1000);
-		marlin_reset_notify_call(MARLIN_CP2_STS_READY);
-#endif
+#endif /*CONFIG_CP2_ASSERT*/
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mdbg_assert_read);

@@ -809,13 +809,13 @@ static int wcn_usb_io_probe(struct usb_interface *interface,
 {
 	/* init a struct wcn_usb_intf and fill it! */
 	struct wcn_usb_intf *intf;
+	int interface_num;
 
 	intf = kzalloc(sizeof(struct wcn_usb_intf), GFP_KERNEL);
 	if (!intf)
 		return -ENOMEM;
 
 	usb_set_intfdata(interface, intf);
-
 	spin_lock_init(&intf->lock);
 	mutex_init(&intf->flag_lock);
 	init_waitqueue_head(&intf->wait_user);
@@ -823,26 +823,24 @@ static int wcn_usb_io_probe(struct usb_interface *interface,
 	intf->interface = usb_get_intf(interface);
 	intf->udev = usb_get_dev(interface_to_usbdev(interface));
 	/* register struct wcn_usb_intf */
-	wcn_usb_intf_fill_store(intf);
+	interface_num = interface->cur_altsetting->desc.bInterfaceNumber;
 
-	wcn_usb_info("interface[%x] is register\n",
-			interface->cur_altsetting->desc.bInterfaceNumber);
+	wcn_usb_intf_fill_store(intf);
+	wcn_usb_info("interface[%x] is register\n", interface_num);
 
 	atomic_set(&wcn_usb_suspend_flag, -1);
 	atomic_set(&wcn_usb_resume_flag, 0);
+	wcn_usb_state_sent_event(interface_plug_base + interface_num);
 
-	wcn_usb_state_sent_event(interface_plug_base +
-			interface->cur_altsetting->desc.bInterfaceNumber);
+	if ((interface_plug_base + interface_num) == interface_2_plug) {
+		if (marlin_probe_status()) {
+			sprdwcn_bus_set_carddump_status(false);
+			marlin_schedule_usb_hotplug();
+		}
+	}
 
 	return 0;
 }
-
-#if (defined(CONFIG_WCN_USB) && defined(CONFIG_MTK_BOARD))
-#include "marlin_platform.h"
-extern bool marlin_get_download_status(void);
-extern void marlin_power_off(enum marlin_sub_sys subsys);
-extern void wcn_usb_state_clear(enum wcn_usb_event event);
-#endif
 
 static void wcn_usb_io_disconnect(struct usb_interface *interface)
 {
@@ -850,31 +848,32 @@ static void wcn_usb_io_disconnect(struct usb_interface *interface)
 	 * this driver may be probe and disconnect so much times!
 	 */
 	struct wcn_usb_intf *intf;
+	int interface_num;
 
-	wcn_usb_state_sent_event(interface_unplug_base +
-			interface->cur_altsetting->desc.bInterfaceNumber);
+	interface_num = interface->cur_altsetting->desc.bInterfaceNumber;
 
-	wcn_usb_info("interface[%x] will be unregister\n",
-			interface->cur_altsetting->desc.bInterfaceNumber);
+	if ((interface_unplug_base + interface_num) == interface_0_unplug) {
+		if (marlin_probe_status()) {
+			marlin_reset_notify_call(MARLIN_CP2_STS_ASSERTED);
+			wcn_usb_state_clear(cp_ready);
+			wcn_usb_state_sent_event(pwr_off);
+			marlin_set_usb_hotplug_status(1);
+			wcn_usb_info("%s usb hotplug disconnect\n", __func__);
+		}
+	}
+
+	wcn_usb_state_sent_event(interface_unplug_base + interface_num);
+	wcn_usb_info("interface[%x] will be unregister\n", interface_num);
+
 	intf = usb_get_intfdata(interface);
-
 	/* this lock must give me! */
 	intf_set_unavailable(intf, 1);
-
 	usb_set_intfdata(interface, NULL);
 	wcn_usb_intf_erase_store(intf);
 	usb_put_dev(intf->udev);
 	usb_put_intf(interface);
 
 	kfree(intf);
-
-#if (defined(CONFIG_WCN_USB) && defined(CONFIG_MTK_BOARD))
-	wcn_usb_info("%s %d\n", __func__, marlin_get_download_status());
-	if (marlin_get_download_status()) {
-		marlin_power_off(MARLIN_ALL);
-		wcn_usb_state_clear(cp_ready);
-	}
-#endif
 }
 
 static int wcn_usb_io_pre_reset(struct usb_interface *interface)
@@ -911,7 +910,7 @@ static int wcn_usb_io_suspend(struct usb_interface *intf, pm_message_t message)
 	struct wcn_usb_ep *ep_to_suspend;
 
 	/* different with PM_EVENT_AUTO_SUSPEND */
-	if (message.event != PM_EVENT_SUSPEND) {
+	if (message.event == PM_EVENT_AUTO_SUSPEND) {
 		wcn_usb_err("%s pm_event[%d] to be confirm...\n", __func__, message.event);
 		return 0;
 	}
@@ -1015,6 +1014,46 @@ out:
 	return 0;
 }
 
+#ifdef CONFIG_AML_BOARD
+static void wcn_usb_io_shutdown(struct device *dev)
+{
+	int chn, interface_num;
+	struct wcn_usb_ep *ep_to_suspend;
+	struct usb_interface *intf;
+
+	intf = to_usb_interface(dev);
+	interface_num = intf->cur_altsetting->desc.bInterfaceNumber;
+
+	if ((interface_plug_base + interface_num) == interface_0_plug) {
+		for (chn = 1; chn < 16; chn++) {
+			ep_to_suspend = wcn_usb_store_get_epFRchn(chn);
+			if (ep_to_suspend) {
+				wcn_usb_info("%s check tx chn[%d]\n", __func__, chn);
+				if (!usb_anchor_empty(&ep_to_suspend->submitted)) {
+					wcn_usb_err("%s tx chn[%d] remaining to be sent\n", __func__, chn);
+				}
+			}
+		}
+
+		ep_to_suspend = wcn_usb_store_get_epFRchn(25);
+		if (likely(ep_to_suspend)) {
+			wcn_usb_info("%s kill urb of chn[%d]\n", __func__, 25);
+			usb_kill_anchored_urbs(&ep_to_suspend->submitted);
+		} else {
+			wcn_usb_err("%s urb not exit of chn[%d]\n", __func__, 25);
+		}
+
+		for (chn = 16; chn < 32; chn++) {
+			ep_to_suspend = wcn_usb_store_get_epFRchn(chn);
+			if (ep_to_suspend) {
+				wcn_usb_info("%s kill urb of chn[%d]\n", __func__, chn);
+				usb_kill_anchored_urbs(&ep_to_suspend->submitted);
+			}
+		}
+	}
+}
+#endif
+
 #if 0
 
 #include <linux/freezer.h>
@@ -1106,6 +1145,10 @@ struct usb_driver wcn_usb_io_driver = {
 	.id_table = wcn_usb_io_id_table,
 	.suspend = wcn_usb_io_suspend,
 	.resume = wcn_usb_io_resume,
+	.reset_resume = wcn_usb_io_resume,
+#ifdef CONFIG_AML_BOARD
+	.drvwrap.driver.shutdown = wcn_usb_io_shutdown,
+#endif
 	.supports_autosuspend = 1,
 };
 

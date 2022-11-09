@@ -27,6 +27,7 @@ struct rx_ba_pkt {
 };
 
 struct rx_ba_node_desc {
+	unsigned short win_start_init;
 	unsigned short win_start;
 	unsigned short win_limit;
 	unsigned short win_tail;
@@ -63,11 +64,9 @@ struct sprdwl_rx_ba_entry {
 
 void sprdwl_reorder_init(struct sprdwl_rx_ba_entry *ba_entry);
 void sprdwl_reorder_deinit(struct sprdwl_rx_ba_entry *ba_entry);
-struct sk_buff *reorder_data_process(struct sprdwl_rx_ba_entry *ba_entry,
+void reorder_data_process(struct sprdwl_rx_ba_entry *ba_entry,
 				     struct sk_buff *pskb);
-#ifdef SPLIT_STACK
 struct sk_buff *reorder_get_skb_list(struct sprdwl_rx_ba_entry *ba_entry);
-#endif
 void wlan_ba_session_event(void *hw_intf,
 			   unsigned char *data, unsigned short len);
 void peer_entry_delba(void *hw_intf, unsigned char sta_lut_index);

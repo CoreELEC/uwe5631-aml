@@ -121,5 +121,6 @@ void sprdwl_fc_add_share_credit(struct sprdwl_vif *vif);
 
 bool is_vowifi_pkt(struct sk_buff *skb, bool *b_cmd_path);
 void tx_up(struct sprdwl_tx_msg *tx_msg);
+void sprdwl_flush_all_txlist(struct sprdwl_tx_msg *sprdwl_tx_dev);
 #endif
 

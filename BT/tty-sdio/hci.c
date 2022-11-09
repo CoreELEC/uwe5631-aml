@@ -161,9 +161,13 @@ int rx_data_recv(const unsigned char* buf, int count,
                     // upper_cb(rxmsg, pack_length);
                     // pr_err("first_disconnect\n");
 
-                } else {
+                } else if( (*(rxmsg + 4) == resume_rxmsg[4]) && (*(rxmsg + 5) == resume_rxmsg[5]) ) {    //应用层断遥控器，
                     // pr_err("second_disconnect\n");
                     red_bt_flag = 0x11; //red
+                    upper_cb(rxmsg, pack_length);
+                }
+                else   //其他设备断
+                {
                     upper_cb(rxmsg, pack_length);
                 }
 

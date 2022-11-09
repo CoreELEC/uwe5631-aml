@@ -232,12 +232,34 @@ struct sk_buff
 	return skb;
 }
 
-void sprdwl_defrag_recover(struct sprdwl_rx_defrag_entry *defrag_entry, unsigned char lut)
+void sprdwl_defrag_recover(struct sprdwl_intf *intf, struct sprdwl_vif *vif)
 {
 	struct rx_defrag_node *node = NULL, *pos_node = NULL;
+	struct sprdwl_rx_defrag_entry *defrag_entry = NULL;
+	struct sprdwl_rx_if *rx_if = NULL;
+	unsigned char lut_index = 0;
+	int i = 0;
+
+	rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
+	defrag_entry = &(rx_if->defrag_entry);
+
+	for (i = 0; i < MAX_LUT_NUM; i++) {
+		if ((vif->mode == SPRDWL_MODE_STATION ||
+		     vif->mode == SPRDWL_MODE_P2P_CLIENT) &&
+		    (intf->peer_entry[i].ctx_id == vif->ctx_id)) {
+			wl_debug("%s, %d, lut_index=%d\n", __func__, __LINE__, intf->peer_entry[i].lut_index);
+			lut_index = intf->peer_entry[i].lut_index;
+			break;
+		}
+	}
+
+	if(i == MAX_LUT_NUM) {
+		wl_info("%s:not found lut_index\n", __func__);
+		return;
+	}
 
 	list_for_each_entry_safe(node, pos_node, &defrag_entry->list, list) {
-		if ((lut == node->desc.sta_lut_index) && (!skb_queue_empty(&node->skb_list))) {
+		if ((lut_index == node->desc.sta_lut_index) && (!skb_queue_empty(&node->skb_list))) {
 			skb_queue_purge(&node->skb_list);
 			wl_info("%s:defrag clear cache\n", __func__);
 		}

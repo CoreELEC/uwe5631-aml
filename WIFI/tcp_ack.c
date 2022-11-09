@@ -512,8 +512,6 @@ void sprdwl_move_tcpack_msg(struct sprdwl_priv *priv,
 	}
 }
 
-extern struct sprdwl_priv *g_sprdwl_priv;
-
 void enable_tcp_ack_delay(char *buf, unsigned char offset)
 {
 	int enable = buf[offset] - '0';
