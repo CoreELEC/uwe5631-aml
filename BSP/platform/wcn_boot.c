@@ -117,13 +117,13 @@ struct gpio_config {
 
 #define WCN_FW_MAX_PATH_NUM	1
 /* path of cp2 firmware. */
-#define UNISOC_FW_PATH_DEFAULT "/etc/firmware/"
+#define UNISOC_FW_PATH_DEFAULT "/lib/firmware/unisoc/"
 static char *wcn_fw_path[WCN_FW_MAX_PATH_NUM] = {
 	UNISOC_FW_PATH_DEFAULT		/* most of projects */
 };
 
 #if defined(CONFIG_WCN_SDIO)
-#define WCN_FW_NAME	"wcnmodem.bin"
+#define WCN_FW_NAME	"unisoc/wcnmodem.bin"
 #elif defined(CONFIG_WCN_USB)
 #define WCN_FW_NAME	"wcnmodem_usb.bin"
 #endif

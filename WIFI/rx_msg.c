@@ -29,8 +29,13 @@
 #include <linux/kthread.h>
 
 #include <linux/version.h>
-//#include <linux/sched.h>
+
+#if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
 #include <uapi/linux/sched/types.h>
+#else
+#include <linux/sched.h>
+#endif
+
 #ifdef RX_HW_CSUM
 bool mh_ipv6_ext_hdr(unsigned char nexthdr)
 {
