@@ -29,7 +29,6 @@
 #include <linux/kthread.h>
 
 #include <linux/version.h>
-//#include <linux/sched.h>
 #include <uapi/linux/sched/types.h>
 #ifdef RX_HW_CSUM
 bool mh_ipv6_ext_hdr(unsigned char nexthdr)

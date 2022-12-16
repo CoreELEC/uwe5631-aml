@@ -3742,6 +3742,13 @@ int marlin_get_power(enum marlin_sub_sys subsys)
 }
 EXPORT_SYMBOL_GPL(marlin_get_power);
 
+int marlin_get_set_power_status(void)
+{
+	return marlin_dev->first_power_on_flag;
+}
+EXPORT_SYMBOL_GPL(marlin_get_set_power_status);
+
+
 bool marlin_get_download_status(void)
 {
 	return marlin_dev->download_finish_flag;

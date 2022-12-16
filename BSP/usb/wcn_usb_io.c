@@ -833,7 +833,7 @@ static int wcn_usb_io_probe(struct usb_interface *interface,
 	wcn_usb_state_sent_event(interface_plug_base + interface_num);
 
 	if ((interface_plug_base + interface_num) == interface_2_plug) {
-		if (marlin_probe_status()) {
+		if (marlin_probe_status() && marlin_get_set_power_status() > 0) {
 			sprdwcn_bus_set_carddump_status(false);
 			marlin_schedule_usb_hotplug();
 		}

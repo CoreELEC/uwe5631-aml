@@ -210,7 +210,6 @@ ccflags-y += -I$(src)/platform/rf/
 ccflags-y += -I$(KERNEL_SRC)/$(M)/include/
 ccflags-y += -I$(KERNEL_SRC)/$(M)/platform/
 ccflags-y += -I$(KERNEL_SRC)/$(M)/include/rf/
-
 #### add cflag for Customer ######
 ### ---------- Goke start ---------- ###
 ifeq ($(CFG_GK_WIFI_DEVICE_UWE5621),y)
