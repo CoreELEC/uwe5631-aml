@@ -72,11 +72,26 @@ struct bt_data_interface_t* bt_data_interface;
 static struct bt_data_interface_cb_t bt_data_interface_cb;
 extern int list_time;
 extern unsigned char dis_flag;
+static int probe_flag = 0 ;
+
 static int mtty_open(struct tty_struct* tty, struct file* filp)
 {
     struct mtty_device* mtty = NULL;
     struct tty_driver* driver = NULL;
+    int cnt = 1;
 
+    while(probe_flag != 1){
+        pr_info("probe is not complete,wait 100ms\n");
+        msleep(100);
+        cnt++;
+        pr_info("%s there wait (%d x 100)ms,max time is 1 s\n",__func__,cnt);
+        if(cnt>11 && probe_flag != 1){
+            pr_info("%s there have wait the max time , (%d x 100) ms,check the ko of insmod \n",__func__,cnt);
+            //return -EAGAIN;
+            break;
+        }
+    }
+    pr_info("%s probe is success!\n",__func__);
     // start_marlin(MARLIN_BLUETOOTH);
     bluetooth_set_power(0, 0);
 
@@ -175,21 +190,7 @@ static int mtty_recv(const unsigned char* buf, int count)
 
 static int sdio_data_transmit(uint8_t* data, size_t count)
 {
-    int i;
-    if(bt_data_interface == NULL){
-	pr_err("%s bt_data_interface is null,retry\n", __func__);
-	for (i = 0; i < 10; i++){
-		msleep(100);
-	   if(bt_data_interface != NULL){
-		break;
-	   }
-	}
-	if(bt_data_interface == NULL){
-	  pr_err("%s bt_data_interface is null,return\n", __func__);
-	  return -EBUSY;
-	}
-    }
-   return bt_data_interface->write(data, count);
+    return bt_data_interface->write(data, count);
 }
 
 static int mtty_write_plus(struct tty_struct* tty,
@@ -687,9 +688,6 @@ static int mtty_probe(struct platform_device* pdev)
     bt_data_interface_cb.size = sizeof(struct bt_data_interface_cb_t);
     bt_data_interface_cb.recv = mtty_recv;
     bt_data_interface = get_marlin_sdio_interface();
-    if(bt_data_interface == NULL){
-      pr_err("%s bt_data_interface is null\n", __func__);
-    }
     bt_data_interface->init(&bt_data_interface_cb);
 
 /********************************************/
@@ -705,7 +703,7 @@ static int mtty_probe(struct platform_device* pdev)
 #ifdef CP2_RESET_SUPPORT
 		marlin_reset_callback_register(MARLIN_BLUETOOTH, &bt_cp2_reset_notifier);
 #endif  /*CP2_RESET_SUPPORT*/
-
+    probe_flag = 1;
     return 0;
 }
 
