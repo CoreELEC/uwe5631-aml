@@ -101,6 +101,7 @@ int marlin_get_wcn_module_vendor(void);
 int marlin_get_ant_num(void);
 void marlin_power_off(enum marlin_sub_sys subsys);
 int marlin_get_power(enum marlin_sub_sys subsys);
+int marlin_get_set_power_status(void);
 int marlin_set_wakeup(enum marlin_sub_sys subsys);
 int marlin_set_sleep(enum marlin_sub_sys subsys, bool enable);
 int marlin_reset_reg(void);
