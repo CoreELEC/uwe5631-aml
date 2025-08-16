@@ -1145,15 +1145,22 @@ static int write_mac_addr(char *mac_file, u8 *addr)
 	 sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1],
 		     addr[2], addr[3], addr[4], addr[5]);
 	 /*save old fs: should be USER_DS*/
-	 old_fs = get_fs();
-	 /*change it to KERNEL_DS*/
-	 set_fs(KERNEL_DS);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	old_fs = force_uaccess_begin();
+#else
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+#endif
+#endif
 	 /*write file*/
 	 vfs_write(fp, buf, sizeof(buf), &pos);
 	 /*close file*/
 	 filp_close(fp, NULL);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 10, 0)
 	 /*restore to old fs*/
 	 set_fs(old_fs);
+#endif
 
 	 return 0;
 }
@@ -1182,14 +1189,22 @@ static int sprdwl_get_mac_from_file(struct sprdwl_vif *vif, u8 *addr)
 		}
 	}
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	fs = force_uaccess_begin();
+#else
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
+#endif
 
 	pos = &fp->f_pos;
 	vfs_read(fp, buf, sizeof(buf), pos);
 
 	filp_close(fp, NULL);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 10, 0)
 	set_fs(fs);
+#endif
 
 	str2mac(buf, addr);
 	if (!is_valid_ether_addr(addr)) {
@@ -1837,4 +1852,4 @@ MODULE_PARM_DESC(tcp_ack_drop_enable, "valid values: [0, 1]");
 #else
 const unsigned int tcp_ack_drop_enable;
 #endif
-
+MODULE_SOFTDEP("pre: uwe5621_bsp_sdio");

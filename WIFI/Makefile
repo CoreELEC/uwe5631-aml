@@ -1,6 +1,7 @@
 PWD := $(shell pwd)
 all_dependencies := driver
 
+KBUILD_EXTRA_SYMBOLS := $(KERNEL_SRC)/$(M)/WIFI/Module.symvers
 
 ifneq ($(UNISOC_BSP_INCLUDE),)
 ccflags-y += -I$(UNISOC_BSP_INCLUDE)

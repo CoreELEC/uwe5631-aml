@@ -136,7 +136,11 @@ int sdiohal_tx_thread(void *data)
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	struct sdiohal_list_t data_list;
 	struct sched_param param;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct timespec64 tm_begin, tm_end;
+#else
 	struct timespec tm_begin, tm_end;
+#endif
 	static long time_total_ns;
 	static int times_count;
 
@@ -154,10 +158,18 @@ int sdiohal_tx_thread(void *data)
 			continue;
 		}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		ktime_get_real_ts64(&p_data->tm_end_sch);
+		sdiohal_pr_perf("tx sch time:%ld\n",
+				(long)(timespec64_to_ns(&p_data->tm_end_sch) -
+				timespec64_to_ns(&p_data->tm_begin_sch)));
+#else
 		getnstimeofday(&p_data->tm_end_sch);
 		sdiohal_pr_perf("tx sch time:%ld\n",
-			(long)(timespec_to_ns(&p_data->tm_end_sch)
-			- timespec_to_ns(&p_data->tm_begin_sch)));
+				(long)(timespec_to_ns(&p_data->tm_end_sch) -
+				timespec_to_ns(&p_data->tm_begin_sch)));
+#endif
+
 		sdiohal_lock_tx_ws();
 		sdiohal_resume_wait();
 
@@ -165,7 +177,11 @@ int sdiohal_tx_thread(void *data)
 		sdiohal_cp_tx_wakeup(PACKER_TX);
 
 		while (!sdiohal_is_tx_list_empty()) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+			ktime_get_real_ts64(&tm_begin);
+#else
 			getnstimeofday(&tm_begin);
+#endif
 
 			sdiohal_tx_find_data_list(&data_list);
 			if (p_data->adma_tx_enable) {
@@ -174,9 +190,15 @@ int sdiohal_tx_thread(void *data)
 			} else
 				sdiohal_tx_data_list_send(&data_list, true);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+			ktime_get_real_ts64(&tm_end);
+			time_total_ns += timespec64_to_ns(&tm_end) -
+					timespec64_to_ns(&tm_begin);
+#else
 			getnstimeofday(&tm_end);
-			time_total_ns += timespec_to_ns(&tm_end)
-				- timespec_to_ns(&tm_begin);
+			time_total_ns += timespec_to_ns(&tm_end) -
+					timespec_to_ns(&tm_begin);
+#endif
 			times_count++;
 			if (!(times_count % PERFORMANCE_COUNT)) {
 				sdiohal_pr_perf("tx list avg time:%ld\n",

@@ -91,7 +91,7 @@ enum marlin_cp2_status {
 enum wcn_hw_type wcn_get_hw_if_type(void);
 enum wcn_clock_type wcn_get_xtal_26m_clk_type(void);
 enum wcn_clock_mode wcn_get_xtal_26m_clk_mode(void);
-unsigned int marlin_get_wcn_chipid(void);
+extern unsigned int marlin_get_wcn_chipid(void);
 const char *wcn_get_chip_name(void);
 enum wcn_chip_model wcn_get_chip_model(void);
 enum wcn_chip_id_type wcn_get_chip_type(void);

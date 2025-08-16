@@ -128,7 +128,7 @@ void mdbg_assert_interface(char *str)
 #endif /*CONFIG_CP2_ASSERT*/
 
 }
-EXPORT_SYMBOL_GPL(mdbg_assert_interface);
+EXPORT_SYMBOL(mdbg_assert_interface);
 
 #ifdef CONFIG_WCN_SDIO
 /* this function get data length from buf head */
@@ -197,7 +197,6 @@ static int mdbg_assert_read(int channel, struct mbuf_t *head,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(mdbg_assert_read);
 
 static int mdbg_loopcheck_read(int channel, struct mbuf_t *head,
 			struct mbuf_t *tail, int num)
@@ -227,7 +226,6 @@ static int mdbg_loopcheck_read(int channel, struct mbuf_t *head,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(mdbg_loopcheck_read);
 
 static int mdbg_at_cmd_read(int channel, struct mbuf_t *head,
 		     struct mbuf_t *tail, int num)
@@ -281,7 +279,6 @@ static int mdbg_at_cmd_read(int channel, struct mbuf_t *head,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(mdbg_at_cmd_read);
 
 #ifdef CONFIG_WCN_PCIE
 static int mdbg_tx_comptele_cb(int chn, int timeout)

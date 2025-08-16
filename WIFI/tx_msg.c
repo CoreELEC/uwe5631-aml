@@ -52,7 +52,11 @@ struct sprdwl_msg_buf *sprdwl_get_msg_buf(void *pdev,
 	struct sprdwl_tx_msg *sprdwl_tx_dev = NULL;
 	struct sprdwl_msg_buf *msg_buf;
 #if defined(MORE_DEBUG)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
 	struct timespec tx_begin;
+#else
+	struct timespec64 tx_begin;
+#endif
 #endif
 
 	dev = (struct sprdwl_intf *)pdev;
@@ -91,8 +95,13 @@ struct sprdwl_msg_buf *sprdwl_get_msg_buf(void *pdev,
 
 	if (msg) {
 #if defined(MORE_DEBUG)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		ktime_get_real_ts64(&tx_begin);
+		msg->tx_start_time = timespec64_to_ns(&tx_begin);
+#else
 		getnstimeofday(&tx_begin);
 		msg->tx_start_time = timespec_to_ns(&tx_begin);
+#endif
 #endif
 		if (type == SPRDWL_TYPE_DATA)
 			msg->msg_type = SPRDWL_TYPE_DATA;
@@ -1203,6 +1212,17 @@ void prepare_addba(struct sprdwl_intf *intf, unsigned char lut_index,
 		peer_entry->ht_enable &&
 		peer_entry->vowifi_enabled != 1 &&
 		!test_bit(tid, &peer_entry->ba_tx_done_map)) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		struct timespec64 time;
+
+		ktime_get_real_ts64(&time);
+		/*need to delay 3s if priv addba failed*/
+		if (((timespec64_to_ns(&time) - timespec64_to_ns(&peer_entry->time[tid]))/1000000) > 3000 ||
+			peer_entry->time[tid].tv_nsec == 0) {
+			wl_debug("%s, %d, tx_addba, tid=%d\n",
+				__func__, __LINE__, tid);
+			ktime_get_real_ts64(&peer_entry->time[tid]);
+#else
 		struct timespec time;
 
 		getnstimeofday(&time);
@@ -1212,6 +1232,7 @@ void prepare_addba(struct sprdwl_intf *intf, unsigned char lut_index,
 			wl_debug("%s, %d, tx_addba, tid=%d\n",
 				__func__, __LINE__, tid);
 			getnstimeofday(&peer_entry->time[tid]);
+#endif
 			test_and_set_bit(tid, &peer_entry->ba_tx_done_map);
 			sprdwl_tx_addba(intf, peer_entry, tid);
 		}

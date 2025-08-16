@@ -252,15 +252,23 @@ unsigned int sdiohal_get_trans_pac_num(void)
 int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	int ret = 0;
+	int ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct timespec64 tm_begin, tm_end;
+#else
 	struct timespec tm_begin, tm_end;
+#endif
 	static long time_total_ns;
 	static int times_count;
 
 	ktime_t kt;
 	u32 sec;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	ktime_get_real_ts64(&tm_begin);
+#else
 	getnstimeofday(&tm_begin);
+#endif
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
 		return -ENODEV;
@@ -302,8 +310,13 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	ktime_get_real_ts64(&tm_end);
+	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
+#else
 	getnstimeofday(&tm_end);
 	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
+#endif
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("tx avg time:%ld len=%d\n",
@@ -318,12 +331,20 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 int sdiohal_sdio_pt_read(unsigned char *src, unsigned int datalen)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	int ret = 0;
+	int ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct timespec64 tm_begin, tm_end;
+#else
 	struct timespec tm_begin, tm_end;
+#endif
 	static long time_total_ns;
 	static int times_count;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	ktime_get_real_ts64(&tm_begin);
+#else
 	getnstimeofday(&tm_begin);
+#endif
 
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -344,8 +365,13 @@ int sdiohal_sdio_pt_read(unsigned char *src, unsigned int datalen)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	ktime_get_real_ts64(&tm_end);
+	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
+#else
 	getnstimeofday(&tm_end);
 	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
+#endif
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("rx avg time:%ld len=%d\n",
@@ -509,12 +535,20 @@ static int sdiohal_config_packer_chain(struct sdiohal_list_t *data_list,
 int sdiohal_adma_pt_write(struct sdiohal_list_t *data_list)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	int ret = 0;
+	int ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct timespec64 tm_begin, tm_end;
+#else
 	struct timespec tm_begin, tm_end;
+#endif
 	static long time_total_ns;
 	static int times_count;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	ktime_get_real_ts64(&tm_begin);
+#else
 	getnstimeofday(&tm_begin);
+#endif
 
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -537,8 +571,13 @@ int sdiohal_adma_pt_write(struct sdiohal_list_t *data_list)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	ktime_get_real_ts64(&tm_end);
+	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
+#else
 	getnstimeofday(&tm_end);
 	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
+#endif
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("tx avg time:%ld\n",
@@ -553,12 +592,20 @@ int sdiohal_adma_pt_write(struct sdiohal_list_t *data_list)
 int sdiohal_adma_pt_read(struct sdiohal_list_t *data_list)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	int ret = 0;
+	int ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct timespec64 tm_begin, tm_end;
+#else
 	struct timespec tm_begin, tm_end;
+#endif
 	static long time_total_ns;
 	static int times_count;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	ktime_get_real_ts64(&tm_begin);
+#else
 	getnstimeofday(&tm_begin);
+#endif
 
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -579,8 +626,13 @@ int sdiohal_adma_pt_read(struct sdiohal_list_t *data_list)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	ktime_get_real_ts64(&tm_end);
+	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
+#else
 	getnstimeofday(&tm_end);
 	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
+#endif
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("rx avg time:%ld\n",
@@ -1223,7 +1275,11 @@ static irqreturn_t sdiohal_irq_handler(int irq, void *para)
 	sdiohal_lock_rx_ws();
 	sdiohal_disable_rx_irq(irq);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	ktime_get_real_ts64(&p_data->tm_begin_irq);
+#else
 	getnstimeofday(&p_data->tm_begin_irq);
+#endif
 	sdiohal_rx_up();
 
 	return IRQ_HANDLED;
@@ -2158,7 +2214,11 @@ static void sdiohal_remove(struct sdio_func *func)
 	complete(&p_data->remove_done);
 
 	if(NULL != p_data->sdio_func[FUNC_0])
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		kfree_sensitive(p_data->sdio_func[FUNC_0]);
+#else
 		kzfree(p_data->sdio_func[FUNC_0]);
+#endif
 
 	if (p_data->irq_type == SDIOHAL_RX_INBAND_IRQ) {
 		sdio_claim_host(p_data->sdio_func[FUNC_1]);

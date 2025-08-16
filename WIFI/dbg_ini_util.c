@@ -34,14 +34,22 @@ static int dbg_load_ini_resource(char *path[], char *buf, int size)
 	if (IS_ERR(filp))
 		return -ENOENT;
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	oldfs = force_uaccess_begin();
+#else
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
+#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 1)
 	ret = kernel_read(filp, buf, size, &filp->f_pos);
 #else
 	ret = kernel_read(filp, filp->f_pos, buf, size);
 #endif
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 10, 0)
 	set_fs(oldfs);
+#endif
 
 	filp_close(filp, NULL);
 

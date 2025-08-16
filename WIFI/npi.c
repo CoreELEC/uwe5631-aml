@@ -44,14 +44,22 @@ static int sprdwl_get_flag(void)
 		wl_err("open file:%s failed\n", SPRDWL_PSM_PATH);
 		return PTR_ERR(fp);
 	}
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	fs = force_uaccess_begin();
+#else
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
+#endif
 
 	pos = &fp->f_pos;
 	vfs_read(fp, file_data, 1, pos);
 
 	filp_close(fp, NULL);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 10, 0)
 	set_fs(fs);
+#endif
 
 	file_data[1] = 0;
 	if (kstrtoull(file_data, 10, &tmp)) {

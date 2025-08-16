@@ -725,7 +725,9 @@ static void cali_save_file(char *path, struct wifi_cali_t *p)
 	struct file *fp;
 	int i, j;
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
 	set_fs(KERNEL_DS);
+#endif
 
 	fp = filp_open(path, O_RDWR | O_CREAT | O_TRUNC, 0771);
 	if (IS_ERR_OR_NULL(fp)) {

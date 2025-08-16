@@ -384,11 +384,18 @@ struct sdiohal_data_t {
 	unsigned long long rx_packer_cnt;
 	char *dtbs_buf;
 
-	/* for performance statics */
+	/* for performance statistics */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct timespec64 tm_begin_sch;
+	struct timespec64 tm_end_sch;
+	struct timespec64 tm_begin_irq;
+	struct timespec64 tm_end_irq;
+#else
 	struct timespec tm_begin_sch;
 	struct timespec tm_end_sch;
 	struct timespec tm_begin_irq;
 	struct timespec tm_end_irq;
+#endif
 
 	/*wakeup_source pointer*/
 	struct wakeup_source *scan_ws;

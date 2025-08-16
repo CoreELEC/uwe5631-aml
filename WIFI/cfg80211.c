@@ -716,10 +716,24 @@ static int sprdwl_add_cipher_key(struct sprdwl_vif *vif, bool pairwise,
 	return ret;
 }
 
+#ifdef CONFIG_WCN_GKI
+static int sprdwl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
+				   int link_id, u8 key_index, bool pairwise,
+				   const u8 *mac_addr,
+				   struct key_params *params)
+#else /*CONFIG_WCN_GKI*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)	// vs mark: keep.. 5.15
+static int sprdwl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
+				   int link_id, u8 key_index, bool pairwise,
+				   const u8 *mac_addr,
+				   struct key_params *params)
+#else
 static int sprdwl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 				   u8 key_index, bool pairwise,
 				   const u8 *mac_addr,
 				   struct key_params *params)
+#endif
+#endif /*CONFIG_WCN_GKI*/
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 
@@ -738,9 +752,21 @@ static int sprdwl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 					     mac_addr);
 }
 
+#ifdef CONFIG_WCN_GKI
+static int sprdwl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
+				   int link_id, u8 key_index, bool pairwise,
+				   const u8 *mac_addr)
+#else /*CONFIG_WCN_GKI*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+static int sprdwl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
+				   int link_id, u8 key_index, bool pairwise,
+				   const u8 *mac_addr)
+#else
 static int sprdwl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 				   u8 key_index, bool pairwise,
 				   const u8 *mac_addr)
+#endif
+#endif /*CONFIG_WCN_GKI*/
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 
@@ -767,10 +793,24 @@ static int sprdwl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 			      pairwise, mac_addr);
 }
 
+#ifdef CONFIG_WCN_GKI
+static int sprdwl_cfg80211_set_default_key(struct wiphy *wiphy,
+					   struct net_device *ndev, int link_id,
+					   u8 key_index, bool unicast,
+					   bool multicast)
+#else /*CONFIG_WCN_GKI*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+static int sprdwl_cfg80211_set_default_key(struct wiphy *wiphy,
+					   struct net_device *ndev, int link_id,
+					   u8 key_index, bool unicast,
+					   bool multicast)
+#else
 static int sprdwl_cfg80211_set_default_key(struct wiphy *wiphy,
 					   struct net_device *ndev,
 					   u8 key_index, bool unicast,
 					   bool multicast)
+#endif
+#endif /*CONFIG_WCN_GKI*/
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 
@@ -1015,7 +1055,17 @@ static int sprdwl_cfg80211_change_beacon(struct wiphy *wiphy,
 	return sprdwl_change_beacon(vif, beacon);
 }
 
+#ifdef CONFIG_WCN_GKI
+static int sprdwl_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev,
+						unsigned int link_id)
+#else /*CONFIG_WCN_GKI*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+static int sprdwl_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev,
+						unsigned int link_id)
+#else
 static int sprdwl_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev)
+#endif
+#endif /*CONFIG_WCN_GKI*/
 {
 #if defined(DFS_MASTER) || defined(STA_SOFTAP_SCC_MODE)
 	struct sprdwl_vif *vif = netdev_priv(ndev);
@@ -2519,7 +2569,11 @@ void sprdwl_report_connection(struct sprdwl_vif *vif,
 		 conn_info->status == SPRDWL_ROAM_SUCCESS){
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 		struct cfg80211_roam_info roam_info = {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+			.links[0].bss = bss,
+#else
 			.bss = bss,
+#endif
 			.req_ie = conn_info->req_ie,
 			.req_ie_len = conn_info->req_ie_len,
 			.resp_ie = conn_info->resp_ie,
@@ -2848,6 +2902,63 @@ static int sprdwl_cfg80211_mgmt_tx(struct wiphy *wiphy,
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+static void sprdwl_cfg80211_mgmt_frame_register(struct wiphy *wiphy,
+						struct wireless_dev *wdev,
+						struct mgmt_frame_regs *upd)
+{
+  	struct sprdwl_vif *vif = container_of(wdev, struct sprdwl_vif, wdev);
+  	struct sprdwl_work *misc_work;
+  	struct sprdwl_reg_mgmt *reg_mgmt;
+  	unsigned long new_mask, old_mask, change_mask;
+  	u16 frame_type;
+  	bool reg;
+  	int i = 0;
+  
+  	if (vif->mode == SPRDWL_MODE_NONE)
+  		return;
+ 
+  	new_mask = upd->interface_stypes;
+  	old_mask = vif->mgmt_reg;
+  	if (new_mask == old_mask)
+  		return;
+ 	//to calculate register or unregister,and management type
+  	//old_mask > new_mask:unregister;old_mask < new_mask:register
+  
+  	change_mask = new_mask ^ old_mask;
+  	vif->mgmt_reg = new_mask;
+  	for_each_set_bit(i, &change_mask, MGMT_REG_MASK_BIT)  {
+  		if(test_bit(i, &old_mask))
+  			reg = 0;
+  		else
+  			reg = 1;
+  
+ 		frame_type = i << 4;
+		/*
+		* SPRD WLAN solutions offload auth & assoc to CP2 Wi-Fi firmware.
+		* Dose not register AUTH frame to CP2, otherwise will makes AP(GO)
+		* function not work
+		*/
+		if (IEEE80211_STYPE_AUTH == frame_type)
+			return;
+ 		//wl_ndev_info(wdev->netdev, "frame_type %d, reg %d\n", frame_type, reg);
+ 		misc_work = sprdwl_alloc_work(sizeof(*reg_mgmt));
+ 		if (!misc_work) {
+  			//wl_ndev_err(wdev->netdev, "%s out of memory\n", __func__);
+  			return;
+  		}
+  
+  		misc_work->vif = vif;
+  		misc_work->id = SPRDWL_WORK_REG_MGMT;
+  
+  		reg_mgmt = (struct sprdwl_reg_mgmt *)misc_work->data;
+  		reg_mgmt->type = frame_type;
+  		reg_mgmt->reg = reg;
+
+ 		sprdwl_queue_work(vif->priv, misc_work);
+  	}
+}
+#else
 static void sprdwl_cfg80211_mgmt_frame_register(struct wiphy *wiphy,
 						struct wireless_dev *wdev,
 						u16 frame_type, bool reg)
@@ -2893,6 +3004,7 @@ static void sprdwl_cfg80211_mgmt_frame_register(struct wiphy *wiphy,
 
 	sprdwl_queue_work(vif->priv, misc_work);
 }
+#endif
 
 void sprdwl_report_remain_on_channel_expired(struct sprdwl_vif *vif)
 {
@@ -3467,7 +3579,11 @@ static struct cfg80211_ops sprdwl_cfg80211_ops = {
 	.remain_on_channel = sprdwl_cfg80211_remain_on_channel,
 	.cancel_remain_on_channel = sprdwl_cfg80211_cancel_remain_on_channel,
 	.mgmt_tx = sprdwl_cfg80211_mgmt_tx,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	.update_mgmt_frame_registrations = sprdwl_cfg80211_mgmt_frame_register,
+#else
 	.mgmt_frame_register = sprdwl_cfg80211_mgmt_frame_register,
+#endif
 	.set_power_mgmt = sprdwl_cfg80211_set_power_mgmt,
 	.set_cqm_rssi_config = sprdwl_cfg80211_set_cqm_rssi_config,
 	.sched_scan_start = sprdwl_cfg80211_sched_scan_start,

@@ -78,6 +78,8 @@
 #define TOTAL_2G_5G_CHANNEL_NUM			(39)/*14+25=39*/
 #define TOTAL_2G_5G_SSID_NUM         9
 
+#define MGMT_REG_MASK_BIT 32
+
 enum sprdwl_mode {
 	SPRDWL_MODE_NONE,
 	SPRDWL_MODE_STATION,

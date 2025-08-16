@@ -235,8 +235,12 @@ int sdiohal_rx_thread(void *data)
 	unsigned int rx_dtbs = 0;
 	unsigned int valid_len = 0;
 	static char *rx_buf;
-	struct sdiohal_list_t *data_list = NULL;
+	struct sdiohal_list_t *data_list;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct timespec64 tm_begin, tm_end;
+#else
 	struct timespec tm_begin, tm_end;
+#endif
 	static long time_total_ns;
 	static int times_count;
 
@@ -259,16 +263,27 @@ int sdiohal_rx_thread(void *data)
 			continue;
 		}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		ktime_get_real_ts64(&p_data->tm_end_irq);
+		sdiohal_pr_perf("rx sch time:%ld\n",
+				(long)(timespec64_to_ns(&p_data->tm_end_irq) -
+				timespec64_to_ns(&p_data->tm_begin_irq)));
+#else
 		getnstimeofday(&p_data->tm_end_irq);
 		sdiohal_pr_perf("rx sch time:%ld\n",
-				(long)(timespec_to_ns(&p_data->tm_end_irq)
-				- timespec_to_ns(&p_data->tm_begin_irq)));
+				(long)(timespec_to_ns(&p_data->tm_end_irq) -
+				timespec_to_ns(&p_data->tm_begin_irq)));
+#endif
 
 		sdiohal_resume_wait();
 		sdiohal_cp_rx_wakeup(PACKER_RX);
 
 read_again:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		ktime_get_real_ts64(&tm_begin);
+#else
 		getnstimeofday(&tm_begin);
+#endif
 
 		if (p_data->adma_rx_enable) {
 			/* read len is packet num */
@@ -348,9 +363,15 @@ read_again:
 		}
 
 submit_list:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		ktime_get_real_ts64(&tm_end);
+		time_total_ns += timespec64_to_ns(&tm_end) -
+				 timespec64_to_ns(&tm_begin);
+#else
 		getnstimeofday(&tm_end);
-		time_total_ns += timespec_to_ns(&tm_end)
-			- timespec_to_ns(&tm_begin);
+		time_total_ns += timespec_to_ns(&tm_end) -
+				 timespec_to_ns(&tm_begin);
+#endif
 		times_count++;
 		if (!(times_count % PERFORMANCE_COUNT)) {
 			sdiohal_pr_perf("rx list avg time:%ld\n",

@@ -410,7 +410,7 @@ unsigned long marlin_get_power_state(void)
 {
 	return marlin_dev->power_state;
 }
-EXPORT_SYMBOL_GPL(marlin_get_power_state);
+EXPORT_SYMBOL(marlin_get_power_state);
 
 unsigned char marlin_get_bt_wl_wake_host_en(void)
 {
@@ -465,7 +465,7 @@ unsigned int marlin_get_wcn_chipid(void)
 
 	return chip_id;
 }
-EXPORT_SYMBOL_GPL(marlin_get_wcn_chipid);
+EXPORT_SYMBOL(marlin_get_wcn_chipid);
 
 /* return chip model, for example:
  * 0: WCN_CHIP_INVALID
@@ -596,7 +596,7 @@ out:
 	WCN_DEBUG("%s: chip_name: %s\n", __func__, wcn_chip_name);
 	return wcn_chip_name;
 }
-EXPORT_SYMBOL_GPL(wcn_get_chip_name);
+EXPORT_SYMBOL(wcn_get_chip_name);
 
 /*
  * Some platforms not insmod bsp ko dynamically. This function is used for
@@ -629,8 +629,14 @@ static int marlin_find_sdio_device_id(unsigned char *path)
 	}
 	WCN_INFO("%s open %s success cnt=%d\n", __func__,
 		 sdio_id_path, i);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	fs = force_uaccess_begin();
+#else
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+#endif
+#endif
 	pos = 0;
 	vfs_read(filp, read_buf, sizeof(read_buf), &pos);
 	WCN_INFO("%s read_buf: %s\n", __func__, read_buf);
@@ -681,7 +687,7 @@ int marlin_get_ant_num(void)
 {
 	return get_board_ant_num();
 }
-EXPORT_SYMBOL_GPL(marlin_get_ant_num);
+EXPORT_SYMBOL(marlin_get_ant_num);
 
 /* get the subsys string */
 const char *strno(int subsys)
@@ -3838,7 +3844,7 @@ int cali_ini_need_download(enum marlin_sub_sys subsys)
 	}
 	return 0;	/* not the first */
 }
-EXPORT_SYMBOL_GPL(cali_ini_need_download);
+EXPORT_SYMBOL(cali_ini_need_download);
 
 int marlin_set_wakeup(enum marlin_sub_sys subsys)
 {
@@ -3963,7 +3969,7 @@ int start_marlin(u32 subsys)
 	return 0;
 #endif
 }
-EXPORT_SYMBOL_GPL(start_marlin);
+EXPORT_SYMBOL(start_marlin);
 
 int stop_marlin(u32 subsys)
 {
@@ -3989,7 +3995,7 @@ int stop_marlin(u32 subsys)
 
 	return marlin_set_power(subsys, false);
 }
-EXPORT_SYMBOL_GPL(stop_marlin);
+EXPORT_SYMBOL(stop_marlin);
 
 static void marlin_power_wq(struct work_struct *work)
 {
@@ -4263,7 +4269,7 @@ int marlin_reset_callback_register(u32 subsys, struct notifier_block *nb)
 {
 	return raw_notifier_chain_register(&marlin_reset_notifiers[subsys], nb);
 }
-EXPORT_SYMBOL_GPL(marlin_reset_callback_register);
+EXPORT_SYMBOL(marlin_reset_callback_register);
 
 void marlin_reset_callback_unregister(u32 subsys, struct notifier_block *nb)
 {
@@ -4272,7 +4278,7 @@ void marlin_reset_callback_unregister(u32 subsys, struct notifier_block *nb)
 	if(ret)
 		WCN_ERR("%s is not registered for reset notification\n", strno(subsys));
 }
-EXPORT_SYMBOL_GPL(marlin_reset_callback_unregister);
+EXPORT_SYMBOL(marlin_reset_callback_unregister);
 
 static int marlin_resume(struct device *dev)
 {
