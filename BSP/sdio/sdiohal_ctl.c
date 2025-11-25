@@ -227,7 +227,6 @@ static int sdiohal_throughput_tx(void)
 static void sdiohal_throughput_tx_compute_time(void)
 {
 	static signed long long times_count;
-	long long tp_mb = 0;
 
 	if (tp_tx_flag != 1)
 		return;

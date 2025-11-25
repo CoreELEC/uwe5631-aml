@@ -1,5 +1,6 @@
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/kthread.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
@@ -87,6 +88,9 @@ static int wcn_mkdir(char *path)
 static int wcn_find_cp2_file_num(char *path, loff_t *pos)
 {
 	int i;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct path config_path;
+#endif
 	struct kstat config_stat;
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
 	mm_segment_t fs_old;
@@ -113,7 +117,14 @@ static int wcn_find_cp2_file_num(char *path, loff_t *pos)
 	if (wcn_cp2_log_cover_old) {
 		for (i = 0; i < wcn_cp2_file_max_num; i++) {
 			sprintf(wcn_cp2_file_path, path, i);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+			ret = kern_path(wcn_cp2_file_path, 0, &config_path);
+			if (!ret) {
+				ret = vfs_getattr(&config_path, &config_stat, STATX_SIZE, 0);
+			}
+#else
 			ret = vfs_stat(wcn_cp2_file_path, &config_stat);
+#endif
 			if (ret)
 				break;
 			exist_file_num++;
@@ -445,6 +456,9 @@ static void wcn_config_log_file(void)
 {
 	struct file *filp;
 	loff_t offset = 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct path config_path;
+#endif
 	struct kstat config_stat;
 	int config_size = 0;
 	int read_len = 0;
@@ -472,7 +486,14 @@ static void wcn_config_log_file(void)
 #endif
 #endif
 	for (index = 0; index < WCN_DEBUG_CFG_MAX_PATH_NUM; index++) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		ret = kern_path(wcn_cp2_config_path[index], 0, &config_path);
+		if (!ret) {
+			ret = vfs_getattr(&config_path, &config_stat, STATX_SIZE, 0);
+		}
+#else
 		ret = vfs_stat(wcn_cp2_config_path[index], &config_stat);
+#endif
 		if (!ret) {
 			config_size = (int)config_stat.size;
 			WCN_INFO("%s: find config file:%s size:%d\n",

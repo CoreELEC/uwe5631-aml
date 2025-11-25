@@ -54,7 +54,11 @@ static int sprdwl_get_flag(void)
 #endif
 
 	pos = &fp->f_pos;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+	kernel_read(fp, file_data, 1, pos);
+#else
 	vfs_read(fp, file_data, 1, pos);
+#endif
 
 	filp_close(fp, NULL);
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 10, 0)
