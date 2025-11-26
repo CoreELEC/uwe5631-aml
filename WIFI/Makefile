@@ -1,12 +1,12 @@
 PWD := $(shell pwd)
 all_dependencies := driver
 
-KBUILD_EXTRA_SYMBOLS := $(KERNEL_SRC)/$(M)/WIFI/Module.symvers
+KBUILD_EXTRA_SYMBOLS := $(M)/../BSP/Module.symvers
 
 ifneq ($(UNISOC_BSP_INCLUDE),)
 ccflags-y += -I$(UNISOC_BSP_INCLUDE)
 endif
-ccflags-y += -I$(KERNEL_SRC)/$(M)/../BSP/include/
+ccflags-y += -I$(M)/../BSP/include/
 ifneq ($(UNISOC_WIFI_CUS_CONFIG),)
 ccflags-y += -DCUSTOMIZE_WIFI_CFG_PATH=\"$(UNISOC_WIFI_CUS_CONFIG)\"
 endif

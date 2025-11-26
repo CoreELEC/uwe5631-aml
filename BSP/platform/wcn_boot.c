@@ -638,7 +638,11 @@ static int marlin_find_sdio_device_id(unsigned char *path)
 #endif
 #endif
 	pos = 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+	kernel_read(filp, read_buf, sizeof(read_buf), &pos);
+#else
 	vfs_read(filp, read_buf, sizeof(read_buf), &pos);
+#endif
 	WCN_INFO("%s read_buf: %s\n", __func__, read_buf);
 	sdio_id_pos = strstr(read_buf, "SDIO_ID=0000:0000");
 	if (!sdio_id_pos) {
@@ -4393,3 +4397,6 @@ module_exit(marlin_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Spreadtrum  WCN Marlin Driver");
 MODULE_AUTHOR("Yufeng Yang <yufeng.yang@spreadtrum.com>");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif

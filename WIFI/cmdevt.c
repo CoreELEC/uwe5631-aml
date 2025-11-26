@@ -3428,7 +3428,11 @@ void sprdwl_event_chan_changed(struct sprdwl_vif *vif, u8 *data, u16 len)
 			/* we will be active on the channel */
 			cfg80211_chandef_create(&chandef, ch,
 						NL80211_CHAN_HT20);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
+			cfg80211_ch_switch_notify(vif->ndev, &chandef);
+#else
 			cfg80211_ch_switch_notify(vif->ndev, &chandef, 0, 0);
+#endif
 		} else
 			wl_err("%s, ch is null!\n", __func__);
 	}

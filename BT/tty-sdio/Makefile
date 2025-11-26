@@ -4,6 +4,8 @@
 PWD := $(shell pwd)
 CURFOLDER ?= $(pwd)
 
+KBUILD_EXTRA_SYMBOLS := $(M)/../../BSP/Module.symvers
+
 #ccflags-y += -I$(srctree)/drivers/net/wireless/uwe5622/sprdwcn/include
 ccflags-y += -I$(CURFOLDER)/include
 #ccflags-y += -DUSE_DTS

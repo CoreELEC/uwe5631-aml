@@ -34,6 +34,7 @@
 #include <linux/kthread.h>
 #include <linux/tty_flip.h>
 #include <linux/workqueue.h>
+#include <linux/version.h>
 
 #include "include/debug.h"
 #include "include/hci.h"
@@ -204,7 +205,11 @@ static void mtty_flush_chars(struct tty_struct* tty)
 {
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
 static int mtty_write_room(struct tty_struct* tty)
+#else
+static unsigned int mtty_write_room(struct tty_struct* tty)
+#endif
 {
     return INT_MAX;
 }
@@ -243,7 +248,7 @@ static int mtty_tty_driver_init(struct mtty_device* device)
         return -ENOMEM;
     }
 
-    driver = alloc_tty_driver(MTTY_DEV_MAX_NR);
+    driver = tty_alloc_driver(1, TTY_DRIVER_REAL_RAW);
 
     if (!driver) {
         return -ENOMEM;
@@ -282,7 +287,7 @@ static int mtty_tty_driver_init(struct mtty_device* device)
     ret = tty_register_driver(driver);
 
     if (ret) {
-        put_tty_driver(driver);
+        tty_driver_kref_put(driver);
         tty_port_destroy(device->port);
         return ret;
     }
@@ -297,7 +302,7 @@ static void mtty_tty_driver_exit(struct mtty_device* device)
     struct tty_driver* driver = device->driver;
 
     tty_unregister_driver(driver);
-    put_tty_driver(driver);
+    tty_driver_kref_put(driver);
     tty_port_destroy(device->port);
 }
 
