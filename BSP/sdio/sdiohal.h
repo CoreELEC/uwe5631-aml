@@ -137,7 +137,11 @@ extern long int sdiohal_log_level;
 #ifdef CONFIG_CUSTOMIZE_32_BIT_RX_RECVBUF_LEN
 #define SDIOHAL_32_BIT_RX_RECVBUF_LEN (CONFIG_CUSTOMIZE_32_BIT_RX_RECVBUF_LEN << 10)
 #else
+#ifdef CONFIG_AML_BOARD
 #define SDIOHAL_32_BIT_RX_RECVBUF_LEN (128 << 10)
+#else//CONFIG_AML_BOARD
+#define SDIOHAL_32_BIT_RX_RECVBUF_LEN (32 << 10)
+#endif //CONFIG_AML_BOARD
 #endif
 #define SDIOHAL_FRAG_PAGE_MAX_ORDER_32_BIT \
 	get_order(SDIOHAL_32_BIT_RX_RECVBUF_LEN)
@@ -435,17 +439,7 @@ void sdiohal_callback_lock(struct mutex *mutex);
 void sdiohal_callback_unlock(struct mutex *mutex);
 
 /* for sleep */
-/*
- *When the voltage of VDDCORE is 0.7V, it cannot reply to SDIO CMD,
- *so the driver does not send cp2 core sleep command, but only sends
- *BT and WIFI power_save command in sdiohal_suspend and sdiohal_resume
- *interfaces. According to the actual test, the power consumption of
- *not delivering the core sleep instruction is 0.03W less than that of
- *delivering the core sleep instruction,in addition, the main control
- *platform does not need SDIO CLK for always supply. To enable the change
- *function, please open the macro CONFIG_WCN_TXRX_NSLP
- */
-#if (defined CONFIG_WCN_SLP) && (!defined CONFIG_WCN_TXRX_NSLP)
+#if 0
 void sdiohal_cp_tx_sleep(enum slp_subsys subsys);
 void sdiohal_cp_tx_wakeup(enum slp_subsys subsys);
 void sdiohal_cp_rx_sleep(enum slp_subsys subsys);

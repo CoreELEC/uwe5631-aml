@@ -61,6 +61,7 @@ static void sprdwl_do_work(struct work_struct *work)
 	struct sprdwl_vif *vif;
 	struct sprdwl_ba_event_data *ba_data;
 	struct sprdwl_priv *priv = container_of(work, struct sprdwl_priv, work);
+	struct sprdwl_intf *intf = (struct sprdwl_intf *)(priv->hw_priv);
 
 	while (1) {
 		sprdwl_work = sprdwl_get_work(priv);
@@ -79,12 +80,25 @@ static void sprdwl_do_work(struct work_struct *work)
 					      reg_mgmt->type,
 					      reg_mgmt->reg ? 1 : 0);
 			break;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)
 		case SPRDWL_WORK_DEAUTH:
 		case SPRDWL_WORK_DISASSOC:
 			cfg80211_rx_unprot_mlme_mgmt(vif->ndev,
 						     sprdwl_work->data,
 						     sprdwl_work->len);
 			break;
+#else
+		case SPRDWL_WORK_DEAUTH:
+			cfg80211_send_unprot_deauth(vif->ndev,
+						     sprdwl_work->data,
+						     sprdwl_work->len);
+			break;
+		case SPRDWL_WORK_DISASSOC:
+			cfg80211_send_unprot_disassoc(vif->ndev,
+						     sprdwl_work->data,
+						     sprdwl_work->len);
+			break;
+#endif
 		case SPRDWL_WORK_MC_FILTER:
 			if (vif->mc_filter->mc_change)
 				sprdwl_set_mc_filter(priv, vif->ctx_id,
@@ -144,7 +158,8 @@ static void sprdwl_do_work(struct work_struct *work)
 					sprdwl_work->data, sprdwl_work->len);
 			break;
 		case SPRDWL_WORK_FW_PWR_DOWN:
-			sprdwl_fw_power_down_ack(vif->priv, vif->ctx_id);
+			if (intf->fw_power_down != 1)
+				sprdwl_fw_power_down_ack(vif->priv, vif->ctx_id);
 			break;
 		case SPRDWL_WORK_HOST_WAKEUP_FW:
 			sprdwl_cmd_host_wakeup_fw(vif->priv, vif->ctx_id);

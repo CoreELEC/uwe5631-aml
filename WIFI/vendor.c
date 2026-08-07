@@ -26,6 +26,7 @@
 #endif /* RTT_SUPPORT */
 
 #define VENDOR_SCAN_RESULT_EXPIRE	(7 * HZ)
+#define WIFI_SUBCMD_SET_COUNTRY_CODE  0x0006
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 static const u8 *wpa_scan_get_ie(u8 *res, u8 ie_len, u8 ie)
@@ -461,9 +462,9 @@ static int sprdwl_vendor_get_llstat_handler(struct wiphy *wiphy,
 	struct sprdwl_priv *priv = wiphy_priv(wiphy);
 	struct sprdwl_vif *vif = container_of(wdev, struct sprdwl_vif, wdev);
 #ifdef CP2_RESET_SUPPORT
-	if(true == priv->sync.scan_not_allowed)
+	if(true == priv->sync.cp2_reset_flag)
 		return 0;
-#endif
+#endif /*CP2_RESET_SUPPORT*/
 	if (!priv || !vif) {
 		wl_err("%s err: EIO\n", __func__);
 		return -EIO;
@@ -868,6 +869,37 @@ static int sprdwl_vendor_gscan_start(struct wiphy *wiphy,
 	kfree(params);
 
 	return ret;
+}
+
+static int sprdwl_vendor_set_country(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+#define ANDR_WIFI_ATTRIBUTE_COUNTRY 8
+	int err = 0, rem, type;
+	char country_code[2] = {0};
+	const struct nlattr *iter;
+
+    if ((data == NULL) || (len == 0))
+        return -EINVAL;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case ANDR_WIFI_ATTRIBUTE_COUNTRY:
+				country_code[0] = *((char *)nla_data(iter));
+				country_code[1] = *((char *)nla_data(iter) + 1);
+				break;
+			default:
+				wl_err("Unknown type: %d\n", type);
+				return -EINVAL;
+		}
+	}
+
+	wl_info("%s country_code:\"%c%c\" \n", __func__, country_code[0], country_code[1]);
+
+	regulatory_hint(wiphy, country_code);
+
+	return err;
 }
 
 /*stop gscan functon------ CMD ID:21*/
@@ -3544,6 +3576,42 @@ static int sprdwl_vendor_set_sar_limits(struct wiphy *wiphy,
 #endif
 }
 
+static int sprdwl_vendor_get_akm_suite(struct wiphy *wiphy,
+				       struct wireless_dev *wdev,
+				       const void *data, int len)
+{
+	int ret, akm_len;
+	struct sprdwl_priv *priv = wiphy_priv(wiphy);
+	struct sk_buff *reply;
+	int index = 0;
+	int akm[8] = {0};
+
+	if (priv->extend_feature & SPRDWL_EXTEND_FEATURE_SAE)
+		akm[index++] = WLAN_AKM_SUITE_SAE;
+	if (priv->extend_feature & SPRDWL_EXTEND_FEATURE_OWE)
+		akm[index++] = WLAN_AKM_SUITE_OWE;
+	if (priv->extend_feature & SPRDWL_EXTEND_FEATURE_DPP)
+		akm[index++] = WLAN_CIPHER_SUITE_DPP;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 19, 8)
+	if (priv->extend_feature & SPRDWL_EXTEND_8021X_SUITE_B_192)
+		akm[index++] = WLAN_CIPHER_SUITE_BIP_GMAC_256;
+#endif
+
+	akm_len = index * sizeof(akm[0]);
+	wl_debug("akm suites count = %d\n", index);
+	reply = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, len);
+	if (!reply)
+		return -ENOMEM;
+	if(nla_put(reply, NL80211_ATTR_AKM_SUITES, akm_len, akm)) {
+		kfree_skb(reply);
+		return -EMSGSIZE;
+	}
+	ret = cfg80211_vendor_cmd_reply(reply);
+	if (ret)
+		wiphy_err(wiphy, "reply cmd error\n");
+	return ret;
+}
+
 static int sprdwl_start_offload_packet(struct sprdwl_priv *priv,
 				       u8 vif_ctx_id,
 				       struct nlattr **tb,
@@ -3721,6 +3789,17 @@ const struct wiphy_vendor_command sprdwl_vendor_cmd[] = {
 		.policy = VENDOR_CMD_RAW_DATA,
 #endif
 		.doit = sprdwl_vendor_gscan_start,
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_SET_COUNTRY_CODE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = sprdwl_vendor_set_country
 	},
 	{/*21*/
 		{
@@ -4121,8 +4200,20 @@ const struct wiphy_vendor_command sprdwl_vendor_cmd[] = {
 		.policy = VENDOR_CMD_RAW_DATA,
 #endif
 		.doit = sprdwl_ftm_configure_responder
-	}
+	},
 #endif /* RTT_SUPPORT */
+	{
+		{
+		    .vendor_id = OUI_SPREAD,
+		    .subcmd = SPRD_NL80211_VENDOR_SUBCMD_GET_AKM_SUITE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			WIPHY_VENDOR_CMD_NEED_RUNNING,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+		.doit = sprdwl_vendor_get_akm_suite
+	},
 };
 
 static const struct nl80211_vendor_cmd_info sprdwl_vendor_events[] = {

@@ -201,8 +201,8 @@ void sdiohal_lock_tx_ws(void)
 	sdiohal_atomic_add(1, &p_data->tx_wake_flag);
 	if (atomic_read(&p_data->tx_wake_flag) > 1)
 		return;
-
-	__pm_stay_awake(p_data->tx_ws);
+	if(sprdwcn_bus_get_wl_wake_host_en() == WL_WAKE_HOST)
+		__pm_stay_awake(p_data->tx_ws);
 }
 
 void sdiohal_unlock_tx_ws(void)
@@ -212,8 +212,8 @@ void sdiohal_unlock_tx_ws(void)
 	sdiohal_atomic_sub(1, &p_data->tx_wake_flag);
 	if (atomic_read(&p_data->tx_wake_flag))
 		return;
-
-	__pm_relax(p_data->tx_ws);
+	if(sprdwcn_bus_get_wl_wake_host_en() == WL_WAKE_HOST)
+		__pm_relax(p_data->tx_ws);
 }
 
 void sdiohal_lock_rx_ws(void)
@@ -225,7 +225,9 @@ void sdiohal_lock_rx_ws(void)
 		return;
 
 	atomic_set(&p_data->rx_wake_flag, 1);
-	__pm_stay_awake(p_data->rx_ws);
+
+	if(sprdwcn_bus_get_wl_wake_host_en() == WL_WAKE_HOST)
+		__pm_stay_awake(p_data->rx_ws);
 }
 
 void sdiohal_unlock_rx_ws(void)
@@ -236,7 +238,9 @@ void sdiohal_unlock_rx_ws(void)
 		return;
 
 	atomic_set(&p_data->rx_wake_flag, 0);
-	__pm_relax(p_data->rx_ws);
+
+	if(sprdwcn_bus_get_wl_wake_host_en() == WL_WAKE_HOST)
+		__pm_relax(p_data->rx_ws);
 }
 
 void sdiohal_lock_scan_ws(void)
@@ -314,7 +318,7 @@ void sdiohal_spinlock_init(void)
 	spin_lock_init(&p_data->rx_spinlock);
 }
 /* for sleep */
-#if (defined CONFIG_WCN_SLP) && (!defined CONFIG_WCN_TXRX_NSLP)
+#if 0
 void sdiohal_cp_tx_sleep(enum slp_subsys subsys)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();

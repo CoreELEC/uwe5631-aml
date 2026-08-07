@@ -32,11 +32,13 @@
 /* auth type */
 #define SPRDWL_AUTH_OPEN		0
 #define SPRDWL_AUTH_SHARED		1
+#define SPRDWL_AUTH_SAE			4
 /* parise or group key type */
 #define SPRDWL_GROUP			0
 #define SPRDWL_PAIRWISE			1
 /* cipher suite */
 #define WLAN_CIPHER_SUITE_PMK           0x000FACFF
+#define WLAN_CIPHER_SUITE_DPP		0x506F9A02
 /* AKM suite */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 #define WLAN_AKM_SUITE_FT_8021X		0x000FAC03
@@ -44,6 +46,7 @@
 #endif
 #define WLAN_AKM_SUITE_WAPI_CERT	0x00147201
 #define WLAN_AKM_SUITE_WAPI_PSK		0x00147202
+#define WLAN_AKM_SUITE_OWE		0x000FAC12
 
 #define SPRDWL_AKM_SUITE_NONE		(0)
 #define SPRDWL_AKM_SUITE_8021X		(1)
@@ -53,7 +56,9 @@
 #define SPRDWL_AKM_SUITE_WAPI_PSK	(4)
 #define SPRDWL_AKM_SUITE_8021X_SHA256	(5)
 #define SPRDWL_AKM_SUITE_PSK_SHA256	(6)
+#define SPRDWL_AKM_SUITE_SAE		(8)
 #define SPRDWL_AKM_SUITE_WAPI_CERT	(12)
+#define SPRDWL_AKM_SUITE_OWE		(18)
 
 /* determine the actual values for the macros below*/
 #define SPRDWL_MAX_SCAN_SSIDS		12
@@ -94,7 +99,8 @@ enum sm_state {
 	SPRDWL_DISCONNECTING,
 	SPRDWL_DISCONNECTED,
 	SPRDWL_CONNECTING,
-	SPRDWL_CONNECTED
+	SPRDWL_CONNECTED,
+	SPRDWL_DRIVER_DISCONNECTING
 };
 
 enum connect_result {
@@ -212,4 +218,8 @@ int sprdwl_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
 				   struct cfg80211_connect_params *sme);
 int sprdwl_cfg80211_disconnect(struct wiphy *wiphy,
 				      struct net_device *ndev, u16 reason_code);
+void sprdwl_cancel_scan(struct sprdwl_vif *vif);
+void sprdwl_cancel_sched_scan(struct sprdwl_vif *vif);
+void sprdwl_reg_notify(struct wiphy *wiphy,
+			      struct regulatory_request *request);
 #endif

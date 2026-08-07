@@ -13,6 +13,7 @@
 #include <linux/kthread.h>
 #include <linux/notifier.h>
 #include <wcn_bus.h>
+#include <marlin_platform.h>
 
 #define wcn_usb_info(fmt, args...) \
 	pr_info("wcn_usb info " fmt, ## args)
@@ -329,6 +330,7 @@ int wcn_usb_state_sent_event(enum wcn_usb_event event);
 int wcn_usb_state_register(struct notifier_block *nb);
 int wcn_usb_state_unregister(struct notifier_block *nb);
 int wcn_usb_state_get(enum wcn_usb_event event);
+void wcn_usb_state_clear(enum wcn_usb_event event);
 
 /* for test dump */
 unsigned int marlin_get_wcn_chipid(void);

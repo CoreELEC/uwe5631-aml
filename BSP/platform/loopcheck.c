@@ -52,10 +52,6 @@ int at_cmd_send(char *buf, unsigned int len)
 
 #ifdef CONFIG_WCN_LOOPCHECK
 
-#if (defined(CONFIG_WCN_USB) && defined(CONFIG_MTK_BOARD))
-extern bool marlin_dev_is_suspended(void);
-#endif
-
 static void loopcheck_work_queue(struct work_struct *work)
 {
 	int ret;
@@ -75,14 +71,6 @@ static void loopcheck_work_queue(struct work_struct *work)
 	if (!timeleft) {
 		stop_loopcheck();
 		WCN_ERR("didn't get loopcheck ack\n");
-
-#if (defined(CONFIG_WCN_USB) && defined(CONFIG_MTK_BOARD))
-		if (marlin_dev_is_suspended()) {
-			WCN_INFO("%s usb disconnect during str ?\n", __func__);
-			return;
-		}
-#endif
-
 		WCN_INFO("start dump CP2 mem\n");
 		mdbg_assert_interface("loopcheck fail");
 		return;

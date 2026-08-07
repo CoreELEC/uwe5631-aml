@@ -176,9 +176,6 @@ struct sprdwcn_bus_ops {
 	int (*get_hif_type)(void);
 	int (*driver_register)(void);
 	void (*driver_unregister)(void);
-	void (*allow_sleep)(enum slp_subsys subsys);
-	void (*sleep_wakeup)(enum slp_subsys subsys);
-
 	/* for usb check cp status */
 	int (*check_cp_ready)(unsigned int addr, int timeout);
 };
