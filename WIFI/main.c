@@ -879,7 +879,15 @@ out:
 #define SPRDWLSETCOUNTRY	(SIOCDEVPRIVATE + 5)
 #define SPRDWLSETTLV		(SIOCDEVPRIVATE + 7)
 
-static int sprdwl_ioctl(struct net_device *ndev, struct ifreq *req, int cmd)
+/*
+ * ndo_do_ioctl stopped being invoked for SIOCDEVPRIVATE range commands as
+ * of Linux 5.15 ("net: remove ndo_do_ioctl fallback for SIOCDEVPRIVATE");
+ * such drivers must implement ndo_siocdevprivate instead. All commands
+ * handled here are in the SIOCDEVPRIVATE range, so this driver moves the
+ * handler over unconditionally rather than juggling both callbacks.
+ */
+static int sprdwl_ioctl(struct net_device *ndev, struct ifreq *req,
+			 void __user *data, int cmd)
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 	struct iwreq *wrq = (struct iwreq *)req;
@@ -1010,12 +1018,16 @@ static int sprdwl_set_mac(struct net_device *dev, void *addr)
 		if (!is_zero_ether_addr(sa->sa_data)) {
 			vif->has_rand_mac = true;
 			memcpy(vif->random_mac, sa->sa_data, ETH_ALEN);
-			memcpy(dev->dev_addr, sa->sa_data, ETH_ALEN);
+			/* dev->dev_addr became read-only (const) in recent
+			 * kernels; eth_hw_addr_set() is the portable setter
+			 * (available since 5.15).
+			 */
+			eth_hw_addr_set(dev, sa->sa_data);
 		} else {
 			vif->has_rand_mac = false;
 			netdev_info(dev, "need clear random mac for sta/softap mode\n");
 			memset(vif->random_mac, 0, ETH_ALEN);
-			memcpy(dev->dev_addr, vif->mac, ETH_ALEN);
+			eth_hw_addr_set(dev, vif->mac);
 		}
 	}
 	/*return success to pass vts test*/
@@ -1030,7 +1042,7 @@ static struct net_device_ops sprdwl_netdev_ops = {
 	.ndo_start_xmit = sprdwl_start_xmit,
 	.ndo_get_stats = sprdwl_get_stats,
 	.ndo_tx_timeout = sprdwl_tx_timeout,
-	.ndo_do_ioctl = sprdwl_ioctl,
+	.ndo_siocdevprivate = sprdwl_ioctl,
 	.ndo_set_mac_address = sprdwl_set_mac,
 };
 
@@ -1132,7 +1144,6 @@ static struct notifier_block sprdwl_inet6addr_cb = {
 static int write_mac_addr(char *mac_file, u8 *addr)
 {
 	struct file *fp = 0;
-	mm_segment_t old_fs;
 	char buf[18];
 	loff_t pos = 0;
 	/*open file*/
@@ -1144,16 +1155,14 @@ static int write_mac_addr(char *mac_file, u8 *addr)
 	 /*format MAC address*/
 	 sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1],
 		     addr[2], addr[3], addr[4], addr[5]);
-	 /*save old fs: should be USER_DS*/
-	 old_fs = get_fs();
-	 /*change it to KERNEL_DS*/
-	 set_fs(KERNEL_DS);
-	 /*write file*/
-	 vfs_write(fp, buf, sizeof(buf), &pos);
+	 /*
+	  * kernel_write() takes a kernel-space buffer directly; the
+	  * old get_fs()/set_fs(KERNEL_DS) dance it used to need was
+	  * removed along with set_fs() in Linux 5.10.
+	  */
+	 kernel_write(fp, buf, sizeof(buf), &pos);
 	 /*close file*/
 	 filp_close(fp, NULL);
-	 /*restore to old fs*/
-	 set_fs(old_fs);
 
 	 return 0;
 }
@@ -1167,7 +1176,6 @@ static int sprdwl_get_mac_from_file(struct sprdwl_vif *vif, u8 *addr)
 {
 	struct file *fp = 0;
 	u8 buf[64] = { 0 };
-	mm_segment_t fs;
 	loff_t *pos;
 	char tmp_mac_file[256] = {0};
 
@@ -1182,14 +1190,15 @@ static int sprdwl_get_mac_from_file(struct sprdwl_vif *vif, u8 *addr)
 		}
 	}
 
-	fs = get_fs();
-	set_fs(KERNEL_DS);
-
 	pos = &fp->f_pos;
-	vfs_read(fp, buf, sizeof(buf), pos);
+	/*
+	 * kernel_read() takes a kernel-space buffer directly; no
+	 * get_fs()/set_fs(KERNEL_DS) override is needed (set_fs() was
+	 * removed in Linux 5.10).
+	 */
+	kernel_read(fp, buf, sizeof(buf), pos);
 
 	filp_close(fp, NULL);
-	set_fs(fs);
 
 	str2mac(buf, addr);
 	if (!is_valid_ether_addr(addr)) {
@@ -1209,7 +1218,11 @@ static int sprdwl_get_mac_from_file(struct sprdwl_vif *vif, u8 *addr)
 
 	return 0;
 random_mac:
-	random_ether_addr(addr);
+	/*
+	 * random_ether_addr() was removed; eth_random_addr() is the
+	 * modern equivalent (available since 3.9, so unconditional here).
+	 */
+	eth_random_addr(addr);
 	wl_warn("%s use random MAC address\n",
 			__func__);
 	/* initialize MAC addr with specific OUI */
@@ -1593,7 +1606,15 @@ static struct sprdwl_vif *sprdwl_register_netdev(struct sprdwl_priv *priv,
 	ndev->features |= NETIF_F_SG;
 	SET_NETDEV_DEV(ndev, wiphy_dev(priv->wiphy));
 
-	sprdwl_set_mac_addr(vif, addr, ndev->dev_addr);
+	{
+		/* ndev->dev_addr is read-only (const) on recent kernels;
+		 * fill a local buffer and commit it via eth_hw_addr_set().
+		 */
+		u8 ndev_mac_addr[ETH_ALEN];
+
+		sprdwl_set_mac_addr(vif, addr, ndev_mac_addr);
+		eth_hw_addr_set(ndev, ndev_mac_addr);
+	}
 
 #ifdef CONFIG_P2P_INTF
 	if (type == NL80211_IFTYPE_P2P_DEVICE)

@@ -1,0 +1,5 @@
+config SPRDWL_NG
+	tristate "Unisoc UWE5621 Wi-Fi driver (SPRDWL_NG)"
+	depends on CFG80211
+	depends on UWE5621_BSP_SDIO
+	default m

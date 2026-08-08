@@ -129,11 +129,11 @@ void sprdwl_clear_stats(struct sprdwl_intf *intf)
 void sprdwl_get_tx_avg_time(struct sprdwl_intf *intf,
 			    unsigned long tx_start_time)
 {
-	struct timespec tx_end;
+	struct timespec64 tx_end;
 
-	getnstimeofday(&tx_end);
+	wcn_getnstimeofday(&tx_end);
 	intf->stats.tx_cost_time +=
-	timespec_to_ns(&tx_end) - tx_start_time;
+	timespec64_to_ns(&tx_end) - tx_start_time;
 	if (intf->stats.gap_num >= STATS_COUNT) {
 		intf->stats.tx_avg_time =
 		intf->stats.tx_cost_time / intf->stats.gap_num;
@@ -1335,7 +1335,7 @@ int sprdwl_suspend_resume_handle(int chn, int mode)
 	struct sprdwl_tx_msg *tx_msg = (struct sprdwl_tx_msg *)intf->sprdwl_tx;
 	int ret = -EBUSY;
 	struct sprdwl_vif *vif;
-	struct timespec time;
+	struct timespec64 time;
 	enum sprdwl_mode sprdwl_mode = SPRDWL_MODE_STATION;
 	u8 mode_found = 0;
 
@@ -1384,8 +1384,8 @@ int sprdwl_suspend_resume_handle(int chn, int mode)
 			sprdwl_fw_power_down_ack(vif->priv, vif->ctx_id);
 		}
 
-		getnstimeofday(&time);
-		intf->sleep_time = timespec_to_ns(&time);
+		wcn_getnstimeofday(&time);
+		intf->sleep_time = timespec64_to_ns(&time);
 		priv->is_suspending = 1;
 		ret = sprdwl_power_save(priv,
 					vif->ctx_id,
@@ -1403,8 +1403,8 @@ int sprdwl_suspend_resume_handle(int chn, int mode)
 
 		complete(&intf->suspend_completed);
 
-		getnstimeofday(&time);
-		intf->sleep_time = timespec_to_ns(&time) - intf->sleep_time;
+		wcn_getnstimeofday(&time);
+		intf->sleep_time = timespec64_to_ns(&time) - intf->sleep_time;
 		ret = sprdwl_power_save(priv,
 					vif->ctx_id,
 					SPRDWL_SUSPEND_RESUME,

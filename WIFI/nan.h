@@ -291,7 +291,7 @@ struct nan_capa {
 
 struct nan_cmd_header {
 	u16 data_len;
-	u8 data[0];
+	u8 data[];
 } __packed;
 
 /* cmd handler*/

@@ -453,7 +453,7 @@ struct wcn_dump_head_info {
 	/* used to check if dump is full */
 	__le32 file_size;
 	u8 reserv[8];
-	struct wcn_dump_section_info section[0];
+	struct wcn_dump_section_info section[];
 } __packed;
 
 static int wcn_fill_dump_head_info(struct wcn_dump_mem_reg *mem_cfg, int cnt)

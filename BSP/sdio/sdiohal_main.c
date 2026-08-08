@@ -253,14 +253,14 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	int ret = 0;
-	struct timespec tm_begin, tm_end;
+	struct timespec64 tm_begin, tm_end;
 	static long time_total_ns;
 	static int times_count;
 
 	ktime_t kt;
 	u32 sec;
 
-	getnstimeofday(&tm_begin);
+	wcn_getnstimeofday(&tm_begin);
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
 		return -ENODEV;
@@ -302,8 +302,8 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
-	getnstimeofday(&tm_end);
-	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
+	wcn_getnstimeofday(&tm_end);
+	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("tx avg time:%ld len=%d\n",
@@ -319,11 +319,11 @@ int sdiohal_sdio_pt_read(unsigned char *src, unsigned int datalen)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	int ret = 0;
-	struct timespec tm_begin, tm_end;
+	struct timespec64 tm_begin, tm_end;
 	static long time_total_ns;
 	static int times_count;
 
-	getnstimeofday(&tm_begin);
+	wcn_getnstimeofday(&tm_begin);
 
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -344,8 +344,8 @@ int sdiohal_sdio_pt_read(unsigned char *src, unsigned int datalen)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
-	getnstimeofday(&tm_end);
-	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
+	wcn_getnstimeofday(&tm_end);
+	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("rx avg time:%ld len=%d\n",
@@ -510,11 +510,11 @@ int sdiohal_adma_pt_write(struct sdiohal_list_t *data_list)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	int ret = 0;
-	struct timespec tm_begin, tm_end;
+	struct timespec64 tm_begin, tm_end;
 	static long time_total_ns;
 	static int times_count;
 
-	getnstimeofday(&tm_begin);
+	wcn_getnstimeofday(&tm_begin);
 
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -537,8 +537,8 @@ int sdiohal_adma_pt_write(struct sdiohal_list_t *data_list)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
-	getnstimeofday(&tm_end);
-	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
+	wcn_getnstimeofday(&tm_end);
+	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("tx avg time:%ld\n",
@@ -554,11 +554,11 @@ int sdiohal_adma_pt_read(struct sdiohal_list_t *data_list)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	int ret = 0;
-	struct timespec tm_begin, tm_end;
+	struct timespec64 tm_begin, tm_end;
 	static long time_total_ns;
 	static int times_count;
 
-	getnstimeofday(&tm_begin);
+	wcn_getnstimeofday(&tm_begin);
 
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -579,8 +579,8 @@ int sdiohal_adma_pt_read(struct sdiohal_list_t *data_list)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
-	getnstimeofday(&tm_end);
-	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
+	wcn_getnstimeofday(&tm_end);
+	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("rx avg time:%ld\n",
@@ -1223,7 +1223,7 @@ static irqreturn_t sdiohal_irq_handler(int irq, void *para)
 	sdiohal_lock_rx_ws();
 	sdiohal_disable_rx_irq(irq);
 
-	getnstimeofday(&p_data->tm_begin_irq);
+	wcn_getnstimeofday(&p_data->tm_begin_irq);
 	sdiohal_rx_up();
 
 	return IRQ_HANDLED;
@@ -2158,7 +2158,10 @@ static void sdiohal_remove(struct sdio_func *func)
 	complete(&p_data->remove_done);
 
 	if(NULL != p_data->sdio_func[FUNC_0])
-		kzfree(p_data->sdio_func[FUNC_0]);
+		/* kzfree() was renamed to kfree_sensitive() in Linux 5.11
+		 * (commit 453431a54934).
+		 */
+		kfree_sensitive(p_data->sdio_func[FUNC_0]);
 
 	if (p_data->irq_type == SDIOHAL_RX_INBAND_IRQ) {
 		sdio_claim_host(p_data->sdio_func[FUNC_1]);

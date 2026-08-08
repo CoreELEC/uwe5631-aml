@@ -4086,7 +4086,18 @@ static int marlin_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int  marlin_remove(struct platform_device *pdev)
+/*
+ * struct platform_driver::remove() changed from returning int to
+ * returning void in Linux 6.11 (commit 0edb555a65d1,
+ * "platform: make platform_driver::remove() return void"). This
+ * function never returned a non-zero status, so the conversion is a
+ * pure signature/return-type change.
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
+static int marlin_remove(struct platform_device *pdev)
+#else
+static void marlin_remove(struct platform_device *pdev)
+#endif
 {
 #if (defined(CONFIG_BT_WAKE_HOST_EN) && defined(CONFIG_AW_BOARD)) \
 	|| defined(CONFIG_RK_BOARD)
@@ -4135,7 +4146,9 @@ static int  marlin_remove(struct platform_device *pdev)
 
 	WCN_INFO("marlin_remove ok!\n");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
 	return 0;
+#endif
 }
 
 static void marlin_shutdown(struct platform_device *pdev)

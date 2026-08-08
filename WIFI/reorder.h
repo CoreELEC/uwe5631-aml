@@ -37,7 +37,7 @@ struct rx_ba_node_desc {
 	unsigned int pn_l;
 	unsigned char reset_pn;
 	unsigned int index_mask;
-	struct rx_ba_pkt reorder_buffer[0];
+	struct rx_ba_pkt reorder_buffer[];
 };
 
 struct rx_ba_node {

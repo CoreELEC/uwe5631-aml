@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #endif
 #include <wcn_bus.h>
+#include "wcn_kcompat.h"
 #ifdef CONFIG_WCN_SLP
 #include "../sleep/sdio_int.h"
 #include "../sleep/slp_mgr.h"
@@ -382,10 +383,10 @@ struct sdiohal_data_t {
 	char *dtbs_buf;
 
 	/* for performance statics */
-	struct timespec tm_begin_sch;
-	struct timespec tm_end_sch;
-	struct timespec tm_begin_irq;
-	struct timespec tm_end_irq;
+	struct timespec64 tm_begin_sch;
+	struct timespec64 tm_end_sch;
+	struct timespec64 tm_begin_irq;
+	struct timespec64 tm_end_irq;
 
 	/*wakeup_source pointer*/
 	struct wakeup_source *scan_ws;

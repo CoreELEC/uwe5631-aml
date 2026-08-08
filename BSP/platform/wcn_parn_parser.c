@@ -143,13 +143,15 @@ static int prefixcmp(const char *str, const char *prefix)
 			return (unsigned char)*prefix - (unsigned char)*str;
 }
 
-#if KERNEL_VERSION(3, 19, 0) <= LINUX_VERSION_CODE
-static int find_callback(struct dir_context *ctx, const char *name, int namlen,
+/*
+ * filldir_t's return type changed from int to bool in Linux 5.16-ish
+ * ("readdir: change filldir[_t] to signal errors differently" era);
+ * this driver's floor (5.15+) always has the new dir_context-based
+ * callback shape, so the historical <3.19 branch has been dropped.
+ * true == "keep iterating" (equivalent of the old `return 0`).
+ */
+static bool find_callback(struct dir_context *ctx, const char *name, int namlen,
 		     loff_t offset, u64 ino, unsigned int d_type)
-#else
-static int find_callback(void *ctx, const char *name, int namlen,
-		     loff_t offset, u64 ino, unsigned int d_type)
-#endif
 {
 	int tmp;
 
@@ -160,7 +162,7 @@ static int find_callback(void *ctx, const char *name, int namlen,
 		WCN_INFO("full fstab name %s\n", fstab_name);
 	}
 
-	return 0;
+	return true;
 }
 
 static struct dir_context ctx =  {

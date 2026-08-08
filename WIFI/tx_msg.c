@@ -46,7 +46,7 @@ struct sprdwl_msg_buf *sprdwl_get_msg_buf(void *pdev,
 	struct sprdwl_tx_msg *sprdwl_tx_dev = NULL;
 	struct sprdwl_msg_buf *msg_buf;
 #if defined(MORE_DEBUG)
-	struct timespec tx_begin;
+	struct timespec64 tx_begin;
 #endif
 
 	dev = (struct sprdwl_intf *)pdev;
@@ -85,8 +85,8 @@ struct sprdwl_msg_buf *sprdwl_get_msg_buf(void *pdev,
 
 	if (msg) {
 #if defined(MORE_DEBUG)
-		getnstimeofday(&tx_begin);
-		msg->tx_start_time = timespec_to_ns(&tx_begin);
+		wcn_getnstimeofday(&tx_begin);
+		msg->tx_start_time = timespec64_to_ns(&tx_begin);
 #endif
 		if (type == SPRDWL_TYPE_DATA)
 			msg->msg_type = SPRDWL_TYPE_DATA;
@@ -1197,15 +1197,15 @@ void prepare_addba(struct sprdwl_intf *intf, unsigned char lut_index,
 		peer_entry->ht_enable &&
 		peer_entry->vowifi_enabled != 1 &&
 		!test_bit(tid, &peer_entry->ba_tx_done_map)) {
-		struct timespec time;
+		struct timespec64 time;
 
-		getnstimeofday(&time);
+		wcn_getnstimeofday(&time);
 		/*need to delay 3s if priv addba failed*/
-		if (((timespec_to_ns(&time) - timespec_to_ns(&peer_entry->time[tid]))/1000000) > 3000 ||
+		if (((timespec64_to_ns(&time) - timespec64_to_ns(&peer_entry->time[tid]))/1000000) > 3000 ||
 			peer_entry->time[tid].tv_nsec == 0) {
 			wl_debug("%s, %d, tx_addba, tid=%d\n",
 				__func__, __LINE__, tid);
-			getnstimeofday(&peer_entry->time[tid]);
+			wcn_getnstimeofday(&peer_entry->time[tid]);
 			test_and_set_bit(tid, &peer_entry->ba_tx_done_map);
 			sprdwl_tx_addba(intf, peer_entry, tid);
 		}

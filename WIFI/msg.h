@@ -94,12 +94,12 @@ struct sprdwl_cmd_hdr {
 	s8 status;
 	u8 rsp_cnt;
 	u8 reserv[2];
-	u8 paydata[0];
+	u8 paydata[];
 } __packed;
 
 struct sprdwl_addr_hdr {
 	struct sprdwl_common_hdr common;
-	u8 paydata[0];
+	u8 paydata[];
 } __packed;
 
 #define SPRDWL_GET_CMD_PAYDATA(msg) \

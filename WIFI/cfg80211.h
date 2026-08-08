@@ -46,7 +46,15 @@
 #endif
 #define WLAN_AKM_SUITE_WAPI_CERT	0x00147201
 #define WLAN_AKM_SUITE_WAPI_PSK		0x00147202
+/*
+ * linux/ieee80211.h grew its own WLAN_AKM_SUITE_OWE definition (as
+ * SUITE(0x000FAC, 18), same numeric value) at some point after this
+ * driver was written; guard against the redefinition rather than
+ * assume it's still missing.
+ */
+#ifndef WLAN_AKM_SUITE_OWE
 #define WLAN_AKM_SUITE_OWE		0x000FAC12
+#endif
 
 #define SPRDWL_AKM_SUITE_NONE		(0)
 #define SPRDWL_AKM_SUITE_8021X		(1)
@@ -119,7 +127,7 @@ enum acl_mode {
 
 struct sprdwl_scan_ssid {
 	u8 len;
-	u8 ssid[0];
+	u8 ssid[];
 } __packed;
 
 struct sprdwl_sched_scan_buf {

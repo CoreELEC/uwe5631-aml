@@ -62,17 +62,17 @@ void sprdwl_msg_deinit(struct sprdwl_msg_list *list)
 {
 	struct sprdwl_msg_buf *msg_buf;
 	struct sprdwl_msg_buf *pos;
-	struct timespec txmsgftime1, txmsgftime2;
+	struct timespec64 txmsgftime1, txmsgftime2;
 
 	atomic_add(SPRDWL_MSG_EXIT_VAL, &list->ref);
 	if (atomic_read(&list->ref) > SPRDWL_MSG_EXIT_VAL)
 		wl_err("%s ref not ok! wait for pop!\n", __func__);
 
-	getnstimeofday(&txmsgftime1);
+	wcn_getnstimeofday(&txmsgftime1);
 	while (atomic_read(&list->ref) > SPRDWL_MSG_EXIT_VAL) {
-		getnstimeofday(&txmsgftime2);
-		if (((unsigned long)(timespec_to_ns(&txmsgftime2) -
-			timespec_to_ns(&txmsgftime1))/1000000) > 3000)
+		wcn_getnstimeofday(&txmsgftime2);
+		if (((unsigned long)(timespec64_to_ns(&txmsgftime2) -
+			timespec64_to_ns(&txmsgftime1))/1000000) > 3000)
 			break;
 		usleep_range(2000, 2500);
 	}

@@ -1072,7 +1072,7 @@ int sprdwl_set_regdom(struct sprdwl_priv *priv, u8 *regdom, u32 len)
 }
 
 int sprdwl_open_fw(struct sprdwl_priv *priv, u8 *vif_ctx_id,
-		   u8 mode, u8 *mac_addr)
+		   u8 mode, const u8 *mac_addr)
 {
 	struct sprdwl_msg_buf *msg;
 	struct sprdwl_cmd_open *p;
@@ -1375,7 +1375,7 @@ int sprdwl_scan(struct sprdwl_priv *priv, u8 vif_ctx_id,
 
 	struct sprdwl_5g_chn {
 		u16 n_5g_chn;
-		u16 chns[0];
+		u16 chns[];
 	} *ext_5g;
 
 	chns_len_5g = chn_count_5g * sizeof(*chns_5g);
@@ -3428,7 +3428,18 @@ void sprdwl_event_chan_changed(struct sprdwl_vif *vif, u8 *data, u16 len)
 			/* we will be active on the channel */
 			cfg80211_chandef_create(&chandef, ch,
 						NL80211_CHAN_HT20);
+			/*
+			 * cfg80211_ch_switch_notify() gained a third
+			 * `unsigned int link_id` argument as part of the
+			 * MLO link-API rework merged for Linux 6.1
+			 * (upstream commit 7b0a0e3c3a88); 0 = the only
+			 * (non-MLO) link.
+			 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+			cfg80211_ch_switch_notify(vif->ndev, &chandef, 0);
+#else
 			cfg80211_ch_switch_notify(vif->ndev, &chandef);
+#endif
 		} else
 			wl_err("%s, ch is null!\n", __func__);
 	}
@@ -3688,7 +3699,7 @@ int sprdwl_set_wowlan(struct sprdwl_priv *priv, int subcmd, void *pad, int pad_l
 	struct wowlan_cmd {
 		u8 sub_cmd_id;
 		u8 pad_len;
-		char pad[0];
+		char pad[];
 	} *cmd;
 
 	if (priv == NULL)

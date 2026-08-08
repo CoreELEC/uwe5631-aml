@@ -10,6 +10,7 @@
 #include "rdc_debug.h"
 #include "wcn_glb.h"
 #include "wcn_misc.h"
+#include "wcn_kcompat.h"
 
 #define MDBG_WRITE_SIZE			(64)
 #define WCN_LOG_MAJOR 255
@@ -260,7 +261,7 @@ int log_cdev_init(void)
 	struct wcnlog_dev *dev[WCN_LOG_MAX_MINOR] = {NULL};
 
 	WCN_DEBUG("log_cdev_init\n");
-	wcnlog_class = class_create(THIS_MODULE, "slog_wcn");
+	wcnlog_class = wcn_class_create("slog_wcn");
 	if (IS_ERR(wcnlog_class))
 		return PTR_ERR(wcnlog_class);
 

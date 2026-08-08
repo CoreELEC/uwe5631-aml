@@ -395,7 +395,7 @@ int sprdwl_init_fw(struct sprdwl_vif *vif)
 	struct sprdwl_priv *priv = vif->priv;
 	enum nl80211_iftype type = vif->wdev.iftype;
 	enum sprdwl_mode mode;
-	u8 *mac;
+	const u8 *mac;
 	u8 vif_ctx_id = 0;
 
 	wl_ndev_log(L_DBG, vif->ndev, "%s type %d, mode %d\n", __func__, type,
@@ -716,10 +716,23 @@ static int sprdwl_add_cipher_key(struct sprdwl_vif *vif, bool pairwise,
 	return ret;
 }
 
+/*
+ * cfg80211_ops callbacks below gained an `int link_id` / `unsigned int
+ * link_id` parameter as part of MLO (multi-link operation) support,
+ * merged in Linux 6.1. This driver has no MLO support, so link_id is
+ * simply unused in each body (always 0 for a non-MLO connection).
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+static int sprdwl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
+				   int link_id, u8 key_index, bool pairwise,
+				   const u8 *mac_addr,
+				   struct key_params *params)
+#else
 static int sprdwl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 				   u8 key_index, bool pairwise,
 				   const u8 *mac_addr,
 				   struct key_params *params)
+#endif
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 
@@ -738,9 +751,15 @@ static int sprdwl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 					     mac_addr);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+static int sprdwl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
+				   int link_id, u8 key_index, bool pairwise,
+				   const u8 *mac_addr)
+#else
 static int sprdwl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 				   u8 key_index, bool pairwise,
 				   const u8 *mac_addr)
+#endif
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 
@@ -767,10 +786,17 @@ static int sprdwl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 			      pairwise, mac_addr);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+static int sprdwl_cfg80211_set_default_key(struct wiphy *wiphy,
+					   struct net_device *ndev,
+					   int link_id, u8 key_index,
+					   bool unicast, bool multicast)
+#else
 static int sprdwl_cfg80211_set_default_key(struct wiphy *wiphy,
 					   struct net_device *ndev,
 					   u8 key_index, bool unicast,
 					   bool multicast)
+#endif
 {
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 
@@ -993,10 +1019,24 @@ err_start:
 	return ret;
 }
 
+/*
+ * struct cfg80211_ap_update replaced struct cfg80211_beacon_data as
+ * the .change_beacon parameter type as part of a later, separate
+ * change (Linux 6.7, commit bb554417c453 "wifi: cfg80211: split
+ * struct cfg80211_ap_settings").
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
+static int sprdwl_cfg80211_change_beacon(struct wiphy *wiphy,
+					 struct net_device *ndev,
+					 struct cfg80211_ap_update *update)
+{
+	struct cfg80211_beacon_data *beacon = &update->beacon;
+#else
 static int sprdwl_cfg80211_change_beacon(struct wiphy *wiphy,
 					 struct net_device *ndev,
 					 struct cfg80211_beacon_data *beacon)
 {
+#endif
 	struct sprdwl_vif *vif = netdev_priv(ndev);
 
 	wl_ndev_log(L_DBG, ndev, "%s\n", __func__);
@@ -1015,7 +1055,19 @@ static int sprdwl_cfg80211_change_beacon(struct wiphy *wiphy,
 	return sprdwl_change_beacon(vif, beacon);
 }
 
+/*
+ * .stop_ap gained a `unsigned int link_id` parameter as part of the
+ * general MLO link-API rework merged for Linux 6.1 (upstream commit
+ * 7b0a0e3c3a88, "wifi: cfg80211: do some rework towards MLO link
+ * APIs" -- the same commit that added the extra cfg80211_ch_switch_notify()
+ * argument used elsewhere in this file). Unused here (no MLO support).
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+static int sprdwl_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev,
+				   unsigned int link_id)
+#else
 static int sprdwl_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev)
+#endif
 {
 #if defined(DFS_MASTER) || defined(STA_SOFTAP_SCC_MODE)
 	struct sprdwl_vif *vif = netdev_priv(ndev);
@@ -2519,7 +2571,19 @@ void sprdwl_report_connection(struct sprdwl_vif *vif,
 		 conn_info->status == SPRDWL_ROAM_SUCCESS){
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 		struct cfg80211_roam_info roam_info = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
 			.bss = bss,
+#else
+			/*
+			 * MLO (multi-link operation) support in Linux 6.1
+			 * moved per-link fields (bss, bssid, channel, addr)
+			 * out of struct cfg80211_roam_info and into a
+			 * links[] array; leaving .valid_links at 0 (the
+			 * default) keeps this a legacy single-link roam,
+			 * so only links[0] needs to be filled in.
+			 */
+			.links[0].bss = bss,
+#endif
 			.req_ie = conn_info->req_ie,
 			.req_ie_len = conn_info->req_ie_len,
 			.resp_ie = conn_info->resp_ie,
@@ -2848,8 +2912,12 @@ static int sprdwl_cfg80211_mgmt_tx(struct wiphy *wiphy,
 	return ret;
 }
 
-static void sprdwl_cfg80211_mgmt_frame_register(struct wiphy *wiphy,
-						struct wireless_dev *wdev,
+/*
+ * Common body shared by the old- and new-style mgmt-frame registration
+ * callbacks: diff a single management subtype's registration state and,
+ * if it actually changed, queue the firmware notification.
+ */
+static void sprdwl_cfg80211_mgmt_frame_reg_one(struct wireless_dev *wdev,
 						u16 frame_type, bool reg)
 {
 	struct sprdwl_vif *vif = container_of(wdev, struct sprdwl_vif, wdev);
@@ -2893,6 +2961,45 @@ static void sprdwl_cfg80211_mgmt_frame_register(struct wiphy *wiphy,
 
 	sprdwl_queue_work(vif->priv, misc_work);
 }
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+static void sprdwl_cfg80211_mgmt_frame_register(struct wiphy *wiphy,
+						struct wireless_dev *wdev,
+						u16 frame_type, bool reg)
+{
+	sprdwl_cfg80211_mgmt_frame_reg_one(wdev, frame_type, reg);
+}
+#else
+/*
+ * cfg80211 replaced the per-call .mgmt_frame_register callback with
+ * .update_mgmt_frame_registrations in Linux 5.8 (commit 013192b3d55e,
+ * "cfg80211: rework the mgmt frame registration API"). The new callback
+ * is handed the *complete* desired bitmap of registered stypes rather
+ * than being invoked once per (de)registration, so this wrapper diffs
+ * it against the driver's own bitmap (vif->mgmt_reg) and replays the
+ * same per-type notification the original code performed.
+ *
+ * struct mgmt_frame_regs::interface_stypes uses the same
+ * "bit N == management subtype (N << 4)" convention as vif->mgmt_reg,
+ * so the two bitmaps are directly comparable.
+ */
+static void sprdwl_cfg80211_update_mgmt_frame_registrations(
+		struct wiphy *wiphy, struct wireless_dev *wdev,
+		struct mgmt_frame_regs *upd)
+{
+	struct sprdwl_vif *vif = container_of(wdev, struct sprdwl_vif, wdev);
+	unsigned long new_regs = upd->interface_stypes;
+	unsigned long changed = new_regs ^ vif->mgmt_reg;
+	int mgmt_type;
+
+	for_each_set_bit(mgmt_type, &changed, 16) {
+		u16 frame_type = mgmt_type << 4;
+		bool reg = test_bit(mgmt_type, &new_regs);
+
+		sprdwl_cfg80211_mgmt_frame_reg_one(wdev, frame_type, reg);
+	}
+}
+#endif
 
 void sprdwl_report_remain_on_channel_expired(struct sprdwl_vif *vif)
 {
@@ -3021,7 +3128,20 @@ static void sprdwl_cfg80211_stop_p2p_device(struct wiphy *wiphy,
 		sprdwl_scan_done(vif, true);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
+/*
+ * .tdls_mgmt gained an `int link_id` parameter (inserted right after
+ * `peer`) as part of the same MLO wave as change_beacon/stop_ap
+ * above; guarded at the same Linux 6.7 threshold. Unused here (no
+ * MLO support in this driver).
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
+static int sprdwl_cfg80211_tdls_mgmt(struct wiphy *wiphy,
+				     struct net_device *ndev, const u8 *peer,
+				     int link_id,
+				     u8 action_code, u8 dialog_token,
+				     u16 status_code,  u32 peer_capability,
+				     bool initiator, const u8 *buf, size_t len)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
 static int sprdwl_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 				     struct net_device *ndev, const u8 *peer,
 				     u8 action_code, u8 dialog_token,
@@ -3467,7 +3587,12 @@ static struct cfg80211_ops sprdwl_cfg80211_ops = {
 	.remain_on_channel = sprdwl_cfg80211_remain_on_channel,
 	.cancel_remain_on_channel = sprdwl_cfg80211_cancel_remain_on_channel,
 	.mgmt_tx = sprdwl_cfg80211_mgmt_tx,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
 	.mgmt_frame_register = sprdwl_cfg80211_mgmt_frame_register,
+#else
+	.update_mgmt_frame_registrations =
+		sprdwl_cfg80211_update_mgmt_frame_registrations,
+#endif
 	.set_power_mgmt = sprdwl_cfg80211_set_power_mgmt,
 	.set_cqm_rssi_config = sprdwl_cfg80211_set_cqm_rssi_config,
 	.sched_scan_start = sprdwl_cfg80211_sched_scan_start,
