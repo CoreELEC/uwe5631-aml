@@ -33,7 +33,13 @@
 #include "cmdevt.h"
 #include "debug.h"
 #include <linux/kthread.h>
+#include <linux/version.h>
+
+#if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
 #include <uapi/linux/sched/types.h>
+#else
+#include <linux/sched.h>
+#endif
 
 struct sprdwl_msg_buf *sprdwl_get_msg_buf(void *pdev,
 					  enum sprdwl_head_type type,
