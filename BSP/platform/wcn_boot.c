@@ -63,7 +63,6 @@ extern int wifi_irq_trigger_level(void);
 extern void extern_bt_set_enable(int is_on);
 #endif
 extern void extern_wifi_set_enable(int is_on);
-extern void set_usb_wifi_power(int is_power);
 #endif
 
 #ifdef CONFIG_GOKE_BOARD
@@ -1339,7 +1338,7 @@ static int gnss_download_firmware(void) {
 	char *buf;
 	int err;
 	unsigned int load_fw_cnt = 0;
-
+	
 	buf = marlin_dev->write_buffer;
 reload:
 	WCN_DEBUG("%s %d.load from %s\n", __func__, load_fw_cnt + 1, GNSS_FIRMWARE_PATH);
@@ -2668,28 +2667,6 @@ static int chip_reset_release(int val)
 
 	return 0;
 }
-#ifdef CONFIG_AML_BOARD
-void marlin_wifi_power(bool on)
-{
-	static unsigned int chip_en_count;
-
-	if (on) {
-		if (chip_en_count == 0) {
-			set_usb_wifi_power(0);
-			set_usb_wifi_power(1);
-			WCN_INFO("marlin chip wifi power on\n");
-		}
-		chip_en_count++;
-	} else {
-		chip_en_count--;
-		if (chip_en_count == 0) {
-			set_usb_wifi_power(0);
-			WCN_INFO("marlin chip wifi power off\n");
-		}
-	}
-	return;
-}
-#endif
 void marlin_chip_en(bool enable, bool reset)
 {
 	static unsigned int chip_en_count;
@@ -3217,9 +3194,6 @@ int chip_power_on(int subsys)
 	marlin_avdd18_dcxo_enable(true);
 	marlin_clk_enable(true);
 	marlin_digital_power_enable(true);
-#ifdef CONFIG_AML_BOARD
-	marlin_wifi_power(true);
-#endif
 #ifdef CONFIG_GOKE_BOARD
 	if (subsys == 0xff) {
 		gk_gpio_set_value(RTL_REG_RST_GPIO, 0);
@@ -3278,9 +3252,6 @@ int chip_power_off(int subsys)
 	}
 #else
 	marlin_chip_en(false, false);
-#endif
-#ifdef CONFIG_AML_BOARD
-	marlin_wifi_power(false);
 #endif
 	marlin_digital_power_enable(false);
 	marlin_analog_power_enable(false);
@@ -4158,9 +4129,6 @@ static void marlin_remove(struct platform_device *pdev)
 		wifipa_enable(0);
 		pmic_bound_xtl_assert(0);
 		marlin_chip_en(false, false);
-		#ifdef CONFIG_AML_BOARD
-			marlin_wifi_power(true);
-		#endif
 	}
 	wcn_bus_deinit();
 #ifdef CONFIG_WCN_SLP
@@ -4197,9 +4165,6 @@ static void marlin_shutdown(struct platform_device *pdev)
 		wifipa_enable(0);
 		pmic_bound_xtl_assert(0);
 		marlin_chip_en(false, false);
-		#ifdef CONFIG_AML_BOARD
-			marlin_wifi_power(true);
-		#endif
 	}
 
 #if (defined(CONFIG_GOKE_BOARD) && defined(CONFIG_WCN_USB))
@@ -4405,3 +4370,16 @@ module_exit(marlin_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Spreadtrum  WCN Marlin Driver");
 MODULE_AUTHOR("Yufeng Yang <yufeng.yang@spreadtrum.com>");
+/*
+ * At least one target kernel (CoreELEC's Amlogic 5.15 tree) gates
+ * filp_open()/kernel_read()/kernel_write() -- all used in this
+ * module (rdc_debug.c, wcn_boot.c and others) -- behind the
+ * "VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver" symbol
+ * namespace and requires an explicit import or modpost fails with
+ * "uses symbol X from namespace ... but does not import it". This is
+ * harmless to declare even on kernels where these symbols aren't
+ * namespaced (e.g. mainline, and the Android common16-6.12 tree this
+ * driver also targets): MODULE_IMPORT_NS() referencing a namespace
+ * that doesn't exist on a given kernel is simply a no-op there.
+ */
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);

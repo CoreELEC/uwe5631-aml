@@ -195,6 +195,17 @@ static int sdio_data_transmit(uint8_t *data, size_t count)
  * `ssize_t (*)(struct tty_struct *, const u8 *, size_t)`, and
  * .write_room from `int (*)(struct tty_struct *)` to
  * `unsigned int (*)(struct tty_struct *)`.
+ *
+ * At least one target kernel (CoreELEC's Amlogic 5.15 kernel) has
+ * backported *only* the .write_room half of this into an otherwise
+ * pre-6.6.1 tree -- confirmed via a real build failure showing
+ * .write_room needing the new `unsigned int` return while .write
+ * still compiled fine with the old `int`-returning form on that same
+ * kernel. So unlike everywhere else in this port, these two can't
+ * share one version guard: WCN_TTY_WRITE_ROOM_RETURNS_UINT lets
+ * .write_room's new form be forced independently of .write's,
+ * defaulted on in the Makefile for the same "kbuild-only, never read
+ * by the Bazel build" reason as this driver's other override macros.
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 1)
 static ssize_t mtty_write_plus(struct tty_struct *tty,
@@ -212,7 +223,7 @@ static void mtty_flush_chars(struct tty_struct *tty)
 {
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 1)
+#if defined(WCN_TTY_WRITE_ROOM_RETURNS_UINT) || LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 1)
 static unsigned int mtty_write_room(struct tty_struct *tty)
 #else
 static int mtty_write_room(struct tty_struct *tty)

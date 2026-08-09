@@ -3433,9 +3433,31 @@ void sprdwl_event_chan_changed(struct sprdwl_vif *vif, u8 *data, u16 len)
 			 * `unsigned int link_id` argument as part of the
 			 * MLO link-API rework merged for Linux 6.1
 			 * (upstream commit 7b0a0e3c3a88); 0 = the only
-			 * (non-MLO) link.
+			 * (non-MLO) link. This 3-arg form is confirmed
+			 * correct on the Android common16-6.12 tree this
+			 * driver also targets (built clean there).
+			 *
+			 * At least one other vendor tree (CoreELEC's
+			 * Amlogic 5.15 kernel) expects a *4th* argument
+			 * beyond that -- confirmed via a real build error
+			 * ("too few arguments... expected 4, have 2") that
+			 * mainline's own signature doesn't require even at
+			 * 6.12, so this is a vendor-specific addition, most
+			 * likely a puncturing-bitmap parameter (mainline's
+			 * sibling function, cfg80211_ch_switch_started_notify,
+			 * has one; some vendor trees have been seen adding
+			 * the same to the plain notify function). Passing
+			 * literal 0 for it is correct regardless of its
+			 * exact type. WCN_CFG80211_CH_SWITCH_NOTIFY_HAS_PUNCT_BITMAP
+			 * is the escape hatch for that, defaulted on in
+			 * WIFI/Makefile for the same reason
+			 * WCN_CFG80211_HAS_MLO_LINK_ID is (kbuild-only
+			 * builds like CoreELEC's; never read by the
+			 * Android/Bazel target).
 			 */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+#if defined(WCN_CFG80211_CH_SWITCH_NOTIFY_HAS_PUNCT_BITMAP)
+			cfg80211_ch_switch_notify(vif->ndev, &chandef, 0, 0);
+#elif defined(WCN_HAVE_CFG80211_MLO_LINK_ID)
 			cfg80211_ch_switch_notify(vif->ndev, &chandef, 0);
 #else
 			cfg80211_ch_switch_notify(vif->ndev, &chandef);

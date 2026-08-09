@@ -369,7 +369,7 @@ extern struct device *sprdwl_dev;
 #define wl_trace(fmt, args...) \
 	do { \
 		if (sprdwl_debug_level >= L_ERR) \
-			pr_err("sprdwl:" fmt, ##args); \
+			trace_printk("sprdwl:" fmt, ##args); \
 	} while (0)
 
 #define wl_err_ratelimited(fmt, args...) \

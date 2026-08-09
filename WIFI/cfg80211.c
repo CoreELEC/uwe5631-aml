@@ -722,7 +722,7 @@ static int sprdwl_add_cipher_key(struct sprdwl_vif *vif, bool pairwise,
  * merged in Linux 6.1. This driver has no MLO support, so link_id is
  * simply unused in each body (always 0 for a non-MLO connection).
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+#if defined(WCN_HAVE_CFG80211_MLO_LINK_ID)
 static int sprdwl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 				   int link_id, u8 key_index, bool pairwise,
 				   const u8 *mac_addr,
@@ -751,7 +751,7 @@ static int sprdwl_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 					     mac_addr);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+#if defined(WCN_HAVE_CFG80211_MLO_LINK_ID)
 static int sprdwl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 				   int link_id, u8 key_index, bool pairwise,
 				   const u8 *mac_addr)
@@ -786,7 +786,7 @@ static int sprdwl_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev,
 			      pairwise, mac_addr);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+#if defined(WCN_HAVE_CFG80211_MLO_LINK_ID)
 static int sprdwl_cfg80211_set_default_key(struct wiphy *wiphy,
 					   struct net_device *ndev,
 					   int link_id, u8 key_index,
@@ -1062,7 +1062,7 @@ static int sprdwl_cfg80211_change_beacon(struct wiphy *wiphy,
  * APIs" -- the same commit that added the extra cfg80211_ch_switch_notify()
  * argument used elsewhere in this file). Unused here (no MLO support).
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+#if defined(WCN_HAVE_CFG80211_MLO_LINK_ID)
 static int sprdwl_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *ndev,
 				   unsigned int link_id)
 #else
@@ -2571,7 +2571,7 @@ void sprdwl_report_connection(struct sprdwl_vif *vif,
 		 conn_info->status == SPRDWL_ROAM_SUCCESS){
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 		struct cfg80211_roam_info roam_info = {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
+#if !defined(WCN_HAVE_CFG80211_MLO_LINK_ID)
 			.bss = bss,
 #else
 			/*

@@ -144,12 +144,43 @@ static int prefixcmp(const char *str, const char *prefix)
 }
 
 /*
- * filldir_t's return type changed from int to bool in Linux 5.16-ish
- * ("readdir: change filldir[_t] to signal errors differently" era);
- * this driver's floor (5.15+) always has the new dir_context-based
- * callback shape, so the historical <3.19 branch has been dropped.
- * true == "keep iterating" (equivalent of the old `return 0`).
+ * filldir_t's return type changed from int to bool in mainline Linux
+ * 5.1 (commit e0654cdcd0e (fs: let filldir_t return bool instead of
+ * an error code)"), so a version check against KERNEL_VERSION(5, 1, 0)
+ * is correct for standard/mainline-derived kernel trees -- including
+ * the Amlogic Android common16-6.12 tree this driver has been built
+ * against successfully.
+ *
+ * However, at least one real downstream tree in the wild --
+ * CoreELEC's Amlogic 5.15 kernel -- has been observed still requiring
+ * the pre-5.1 int-returning convention despite its 5.15 version
+ * label (confirmed via an actual build failure: "incompatible
+ * function pointer types initializing 'filldir_t' (aka 'int (*)(...)
+ * ...)' with an expression of type 'bool (...)'"). Since the
+ * LINUX_VERSION_CODE a tree reports isn't a fully reliable signal
+ * for this specific ABI on such vendor forks, WCN_FILLDIR_RETURNS_INT
+ * is provided as an escape hatch: define it (e.g. via
+ * `ccflags-y += -DWCN_FILLDIR_RETURNS_INT` in a kernel-specific
+ * Makefile/build config) to force the old int-returning form
+ * regardless of LINUX_VERSION_CODE, for trees like CoreELEC's that
+ * need it.
  */
+#if defined(WCN_FILLDIR_RETURNS_INT)
+static int find_callback(struct dir_context *ctx, const char *name, int namlen,
+		     loff_t offset, u64 ino, unsigned int d_type)
+{
+	int tmp;
+
+	tmp = prefixcmp(name, prefix);
+	if (tmp == 0) {
+		if (sizeof(fstab_name) > strlen(fstab_name) + strlen(name) + 2)
+			strcat(fstab_name, name);
+		WCN_INFO("full fstab name %s\n", fstab_name);
+	}
+
+	return 0;
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 static bool find_callback(struct dir_context *ctx, const char *name, int namlen,
 		     loff_t offset, u64 ino, unsigned int d_type)
 {
@@ -164,6 +195,22 @@ static bool find_callback(struct dir_context *ctx, const char *name, int namlen,
 
 	return true;
 }
+#else
+static int find_callback(struct dir_context *ctx, const char *name, int namlen,
+		     loff_t offset, u64 ino, unsigned int d_type)
+{
+	int tmp;
+
+	tmp = prefixcmp(name, prefix);
+	if (tmp == 0) {
+		if (sizeof(fstab_name) > strlen(fstab_name) + strlen(name) + 2)
+			strcat(fstab_name, name);
+		WCN_INFO("full fstab name %s\n", fstab_name);
+	}
+
+	return 0;
+}
+#endif
 
 static struct dir_context ctx =  {
 	.actor = find_callback,

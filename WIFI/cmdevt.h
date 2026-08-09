@@ -650,7 +650,22 @@ struct sprdwl_cmd_11v {
 	u16 len;
 	union {
 		u32 value;
-		u8 buf[];
+		/*
+		 * A flexible array member (`buf[]`) inside a union is
+		 * rejected outright by at least one target compiler
+		 * (CoreELEC's Amlogic 5.15 toolchain: "flexible array
+		 * member 'buf' in a union is not allowed") -- stricter
+		 * than the zero-length-array GNU extension this field
+		 * used before the round-5 FORTIFY_SOURCE sweep. Kept as
+		 * `[0]` here rather than `[]`: unlike the other fields
+		 * that sweep converted, `buf` is never actually written
+		 * to anywhere in this driver (only `.value` in the same
+		 * union is ever used), so it was never a real
+		 * __write_overflow_field risk in the first place --
+		 * reverting it is a pure compatibility fix with no
+		 * FORTIFY trade-off.
+		 */
+		u8 buf[0];
 	};
 } __packed;
 

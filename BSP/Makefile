@@ -4,6 +4,24 @@ CURFOLDER ?= $(pwd)
 LD_CFLAGS += -D__linux__
 EXTRA_CFLAGS=-fno-pic
 
+# Some downstream vendor kernel trees (e.g. CoreELEC's Amlogic 5.15
+# kernel) have been observed still using the pre-Linux-5.1
+# int-returning filldir_t calling convention despite their reported
+# LINUX_VERSION_CODE. This showed up as a real, repeated build failure
+# in BSP/platform/wcn_parn_parser.c:
+#   error: incompatible function pointer types initializing 'filldir_t'
+#   (aka 'int (*)(...)') with an expression of type 'bool (...)'
+#
+# This Makefile (the traditional kbuild path) is only ever used for
+# builds like CoreELEC's; the Android/AOSP target this driver also
+# supports builds exclusively through BUILD.bazel's ddk_module (which
+# sets its own local_defines and never reads this Makefile's
+# ccflags-y at all), so enabling this here by default cannot affect
+# that target. If you're building this Makefile against some other
+# kbuild-based kernel tree that *does* have the modern bool-returning
+# filldir_t, comment the line back out.
+ccflags-y += -DWCN_FILLDIR_RETURNS_INT
+
 all_dependencies := driver
 driver_dependencies :=
 

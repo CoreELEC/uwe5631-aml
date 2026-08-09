@@ -80,4 +80,25 @@ static inline int wcn_vfs_stat(const char *path_str, struct kstat *stat)
 	return 0;
 }
 
+/*
+ * Some downstream cfg80211/nl80211 vendor kernel trees (e.g.
+ * CoreELEC's Amlogic 5.15 kernel) have backported the Linux 6.1 MLO
+ * (multi-link operation) cfg80211_ops signature rework -- link_id
+ * parameters added to .add_key/.del_key/.set_default_key/.stop_ap,
+ * and struct cfg80211_roam_info's per-link fields moved into a
+ * links[] array -- without a corresponding LINUX_VERSION_CODE bump
+ * (confirmed via real build failures showing this exact rework
+ * already present on a kernel reporting 5.15). WCN_CFG80211_HAS_MLO_LINK_ID
+ * is an escape hatch: define it (as WIFI/Makefile does by default,
+ * for the same reason BSP/Makefile defaults WCN_FILLDIR_RETURNS_INT
+ * -- this Makefile is only ever used for kbuild-style builds like
+ * CoreELEC's, never by the Android/Bazel target) to force the
+ * "has this rework" code path regardless of LINUX_VERSION_CODE.
+ */
+#if defined(WCN_CFG80211_HAS_MLO_LINK_ID)
+#define WCN_HAVE_CFG80211_MLO_LINK_ID 1
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+#define WCN_HAVE_CFG80211_MLO_LINK_ID 1
+#endif
+
 #endif /* __WCN_KCOMPAT_H__ */

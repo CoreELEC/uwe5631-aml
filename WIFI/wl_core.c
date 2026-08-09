@@ -902,3 +902,15 @@ MODULE_LICENSE("GPL");
  * other loading paths that don't consult depmod's dependency graph.
  */
 MODULE_SOFTDEP("pre: uwe5621_bsp_sdio");
+/*
+ * At least one target kernel (CoreELEC's Amlogic 5.15 tree) gates
+ * filp_open()/kernel_read()/kernel_write() -- used in dbg_ini_util.c,
+ * main.c, npi.c, rf_marlin3.c, and rx_msg.c -- behind the
+ * "VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver" symbol
+ * namespace; without this, modpost fails with "uses symbol X from
+ * namespace ... but does not import it" (see the same fix in the
+ * uwe5621_bsp_sdio module, BSP/platform/wcn_boot.c, for the BSP
+ * side of this same issue). Harmless no-op on kernels where these
+ * symbols aren't namespaced.
+ */
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
