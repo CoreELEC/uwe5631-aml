@@ -33,13 +33,6 @@
 #include "cmdevt.h"
 #include "debug.h"
 #include <linux/kthread.h>
-#include <linux/version.h>
-
-#if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
-#include <uapi/linux/sched/types.h>
-#else
-#include <linux/sched.h>
-#endif
 
 struct sprdwl_msg_buf *sprdwl_get_msg_buf(void *pdev,
 					  enum sprdwl_head_type type,
@@ -52,11 +45,7 @@ struct sprdwl_msg_buf *sprdwl_get_msg_buf(void *pdev,
 	struct sprdwl_tx_msg *sprdwl_tx_dev = NULL;
 	struct sprdwl_msg_buf *msg_buf;
 #if defined(MORE_DEBUG)
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
 	struct timespec tx_begin;
-#else
-	struct timespec64 tx_begin;
-#endif
 #endif
 
 	dev = (struct sprdwl_intf *)pdev;
@@ -95,13 +84,8 @@ struct sprdwl_msg_buf *sprdwl_get_msg_buf(void *pdev,
 
 	if (msg) {
 #if defined(MORE_DEBUG)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&tx_begin);
-		msg->tx_start_time = timespec64_to_ns(&tx_begin);
-#else
 		getnstimeofday(&tx_begin);
 		msg->tx_start_time = timespec_to_ns(&tx_begin);
-#endif
 #endif
 		if (type == SPRDWL_TYPE_DATA)
 			msg->msg_type = SPRDWL_TYPE_DATA;
@@ -881,7 +865,12 @@ static int sprdwl_handle_to_send_list(struct sprdwl_intf *intf,
 	struct sprdwl_msg_list *list = &tx_msg->tx_list_qos_pool;
 	u8 coex_bt_on = intf->coex_bt_on;
 
-	if ((!list_empty(&tx_msg->xmit_msg_list.to_send_list)) && (intf->cp_asserted != 1)) {
+#ifdef CP2_RESET_SUPPORT
+	if(intf->cp_asserted == 1)
+		return 0;
+#endif
+
+	if (!list_empty(&tx_msg->xmit_msg_list.to_send_list)) {
 		to_send_list = &tx_msg->xmit_msg_list.to_send_list;
 		t_lock = &tx_msg->xmit_msg_list.send_lock;
 		spin_lock_bh(t_lock);
@@ -1212,17 +1201,6 @@ void prepare_addba(struct sprdwl_intf *intf, unsigned char lut_index,
 		peer_entry->ht_enable &&
 		peer_entry->vowifi_enabled != 1 &&
 		!test_bit(tid, &peer_entry->ba_tx_done_map)) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		struct timespec64 time;
-
-		ktime_get_real_ts64(&time);
-		/*need to delay 3s if priv addba failed*/
-		if (((timespec64_to_ns(&time) - timespec64_to_ns(&peer_entry->time[tid]))/1000000) > 3000 ||
-			peer_entry->time[tid].tv_nsec == 0) {
-			wl_debug("%s, %d, tx_addba, tid=%d\n",
-				__func__, __LINE__, tid);
-			ktime_get_real_ts64(&peer_entry->time[tid]);
-#else
 		struct timespec time;
 
 		getnstimeofday(&time);
@@ -1232,7 +1210,6 @@ void prepare_addba(struct sprdwl_intf *intf, unsigned char lut_index,
 			wl_debug("%s, %d, tx_addba, tid=%d\n",
 				__func__, __LINE__, tid);
 			getnstimeofday(&peer_entry->time[tid]);
-#endif
 			test_and_set_bit(tid, &peer_entry->ba_tx_done_map);
 			sprdwl_tx_addba(intf, peer_entry, tid);
 		}
@@ -1355,19 +1332,16 @@ static int sprdwl_tx_work_queue(void *data)
 	enum sprdwl_mode mode = SPRDWL_MODE_NONE;
 	int send_num = 0;
 	struct sprdwl_priv *priv;
-	struct sched_param param;
 
 	tx_msg = (struct sprdwl_tx_msg *)data;
 	intf = tx_msg->intf;
 	priv = intf->priv;
-
-	param.sched_priority = 1;
-	sched_setscheduler(current, SCHED_FIFO, &param);
+	set_user_nice(current, -20);
 
 	while (1) {
 		tx_down(tx_msg);
-		if (intf->exit)
-			break;
+		if (intf->exit || kthread_should_stop())
+			return 0;
 		need_polling = 0;
 		polling_times = 0;
 		/*During hang recovery, send data is not allowed.
@@ -1404,6 +1378,7 @@ static int sprdwl_tx_work_queue(void *data)
 		     !list_empty(&tx_msg->xmit_msg_list.to_free_list))) {
 				struct sprdwl_vif *vif;
 
+				sprdwcn_bus_sleep_wakeup(WIFI);
 				vif = mode_to_vif(priv, tx_msg->mode);
 				intf->fw_power_down = 0;
 				sprdwl_work_host_wakeup_fw(vif);
@@ -1447,13 +1422,8 @@ static int sprdwl_tx_work_queue(void *data)
 		}
 	}
 
-	for (;;) {
-		set_current_state(TASK_INTERRUPTIBLE);
-		if (kthread_should_stop())
-			break;
-		schedule();
-	}
-	__set_current_state(TASK_RUNNING);
+	wl_err("%s no longer exsit, flush data, return!\n", __func__);
+	sprdwl_flush_all_txlist(tx_msg);
 
 	return 0;
 }
@@ -1722,7 +1692,11 @@ bool is_vowifi_pkt(struct sk_buff *skb, bool *b_cmd_path)
 	if (iphdr->protocol != IPPROTO_UDP)
 		return false;
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0)
+	iphdrlen = ip_hdrlen(skb);
+#else
 	iphdrlen = iphdr->ihl * 4;
+#endif
 	udphdr = (struct udphdr *)(skb->data + ETHER_HDR_LEN + iphdrlen);
 	dscp = (iphdr->tos >> 2);
 	switch (dscp) {
@@ -1783,7 +1757,11 @@ int sprdwl_tx_filter_ip_pkt(struct sk_buff *skb, struct net_device *ndev)
 		/* check for udp header */
 		if (iphdr->protocol != IPPROTO_UDP)
 			return 1;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0)
+		iphdrlen = ip_hdrlen(skb);
+#else
 		iphdrlen = iphdr->ihl * 4;
+#endif
 	} else {
 		return 1;
 	}

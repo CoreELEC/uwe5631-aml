@@ -131,7 +131,7 @@ static struct wcn_usb_notifier *wcn_usb_notifier_register(void (*cb)(void *),
 		cb(data);
 
 	/* wait corresponding event */
-	wn = kzalloc(sizeof(struct wcn_usb_notifier), GFP_ATOMIC);
+	wn = kzalloc(sizeof(struct wcn_usb_notifier), GFP_KERNEL);
 	if (!wn)
 		return NULL;
 
@@ -358,8 +358,7 @@ static void wcn_usb_register_rescan_cb(void *data)
 			(void *)data, dev_plug_fully);
 }
 
-#if ((defined CONFIG_HISI_BOARD || defined CONFIG_GOKE_BOARD) \
-	&& (defined CONFIG_USB_EHCI_HCD))
+#if (defined CONFIG_USB_EHCI_HCD && defined CONFIG_HISI_BOARD)
 #define READ_SIZE PAGE_SIZE
 char ehci_dbg_buf[PAGE_SIZE];
 static int wcn_mount_debugfs(void)
@@ -428,10 +427,9 @@ static void print_ehci_info(void)
 static void wcn_usb_set_carddump_status(unsigned int status)
 {
 	if (status) {
-#if ((defined CONFIG_HISI_BOARD || defined CONFIG_GOKE_BOARD) \
-	&& (defined CONFIG_USB_EHCI_HCD))
+		#if (defined CONFIG_USB_EHCI_HCD &&  defined CONFIG_HISI_BOARD)
 		print_ehci_info();
-#endif
+		#endif
 		wcn_usb_state_sent_event(error_happen);
 	} else
 		wcn_usb_state_sent_event(error_clean);
@@ -484,7 +482,7 @@ static int wcn_usb_check_cp_ready(unsigned int addr, int timout)
 	static struct wcn_usb_notifier *usb_notifier;
 	int ret = 0;
 
-	sync_complete = kzalloc(sizeof(struct completion), GFP_ATOMIC);
+	sync_complete = kzalloc(sizeof(struct completion), GFP_KERNEL);
 	if (!sync_complete) {
 		ret = -ENOMEM;
 		goto OUT;

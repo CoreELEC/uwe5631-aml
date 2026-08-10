@@ -201,8 +201,8 @@ void sdiohal_lock_tx_ws(void)
 	sdiohal_atomic_add(1, &p_data->tx_wake_flag);
 	if (atomic_read(&p_data->tx_wake_flag) > 1)
 		return;
-	if(sprdwcn_bus_get_wl_wake_host_en() == WL_WAKE_HOST)
-		__pm_stay_awake(p_data->tx_ws);
+
+	__pm_stay_awake(p_data->tx_ws);
 }
 
 void sdiohal_unlock_tx_ws(void)
@@ -212,8 +212,8 @@ void sdiohal_unlock_tx_ws(void)
 	sdiohal_atomic_sub(1, &p_data->tx_wake_flag);
 	if (atomic_read(&p_data->tx_wake_flag))
 		return;
-	if(sprdwcn_bus_get_wl_wake_host_en() == WL_WAKE_HOST)
-		__pm_relax(p_data->tx_ws);
+
+	__pm_relax(p_data->tx_ws);
 }
 
 void sdiohal_lock_rx_ws(void)
@@ -225,9 +225,7 @@ void sdiohal_lock_rx_ws(void)
 		return;
 
 	atomic_set(&p_data->rx_wake_flag, 1);
-
-	if(sprdwcn_bus_get_wl_wake_host_en() == WL_WAKE_HOST)
-		__pm_stay_awake(p_data->rx_ws);
+	__pm_stay_awake(p_data->rx_ws);
 }
 
 void sdiohal_unlock_rx_ws(void)
@@ -238,9 +236,7 @@ void sdiohal_unlock_rx_ws(void)
 		return;
 
 	atomic_set(&p_data->rx_wake_flag, 0);
-
-	if(sprdwcn_bus_get_wl_wake_host_en() == WL_WAKE_HOST)
-		__pm_relax(p_data->rx_ws);
+	__pm_relax(p_data->rx_ws);
 }
 
 void sdiohal_lock_scan_ws(void)
@@ -317,8 +313,9 @@ void sdiohal_spinlock_init(void)
 	spin_lock_init(&p_data->tx_spinlock);
 	spin_lock_init(&p_data->rx_spinlock);
 }
+
 /* for sleep */
-#if 0
+#ifdef CONFIG_WCN_SLP
 void sdiohal_cp_tx_sleep(enum slp_subsys subsys)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
@@ -652,11 +649,7 @@ int sdiohal_tx_list_denq(struct sdiohal_list_t *data_list)
 	struct mutex *chn_callback = p_data->callback_lock;
 	struct mchn_ops_t *sdiohal_ops;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct timespec64 tm_begin, tm_end;
-#else
 	struct timespec tm_begin, tm_end;
-#endif
 	static long time_total_ns;
 	static int times_count;
 
@@ -680,11 +673,7 @@ int sdiohal_tx_list_denq(struct sdiohal_list_t *data_list)
 			continue;
 		}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&tm_begin);
-#else
 		getnstimeofday(&tm_begin);
-#endif
 
 		sdiohal_callback_lock(&chn_callback[channel]);
 		sdiohal_ops = chn_ops(channel);
@@ -720,15 +709,9 @@ int sdiohal_tx_list_denq(struct sdiohal_list_t *data_list)
 		tx_list->node_num = 0;
 		sdiohal_callback_unlock(&chn_callback[channel]);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&tm_end);
-		time_total_ns += timespec64_to_ns(&tm_end) -
-				timespec64_to_ns(&tm_begin);
-#else
 		getnstimeofday(&tm_end);
-		time_total_ns += timespec_to_ns(&tm_end) -
-				timespec_to_ns(&tm_begin);
-#endif
+		time_total_ns += timespec_to_ns(&tm_end)
+			- timespec_to_ns(&tm_begin);
 		times_count++;
 		if (!(times_count % PERFORMANCE_COUNT)) {
 			sdiohal_pr_perf("tx pop callback,avg time:%ld\n",
@@ -750,11 +733,7 @@ int sdiohal_rx_list_dispatch(void)
 	struct mutex *chn_callback = p_data->callback_lock;
 	struct mchn_ops_t *sdiohal_ops;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct timespec64 tm_begin, tm_end;
-#else
 	struct timespec tm_begin, tm_end;
-#endif
 	static long time_total_ns;
 	static int times_count;
 
@@ -779,11 +758,7 @@ int sdiohal_rx_list_dispatch(void)
 			continue;
 		}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&tm_begin);
-#else
 		getnstimeofday(&tm_begin);
-#endif
 
 		sdiohal_callback_lock(&chn_callback[channel]);
 		sdiohal_ops = chn_ops(channel);
@@ -824,15 +799,9 @@ int sdiohal_rx_list_dispatch(void)
 		rx_list->node_num = 0;
 		sdiohal_callback_unlock(&chn_callback[channel]);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&tm_end);
-		time_total_ns += timespec64_to_ns(&tm_end)
-			- timespec64_to_ns(&tm_begin);
-#else
 		getnstimeofday(&tm_end);
 		time_total_ns += timespec_to_ns(&tm_end)
 			- timespec_to_ns(&tm_begin);
-#endif
 		times_count++;
 		if (!(times_count % PERFORMANCE_COUNT)) {
 			sdiohal_pr_perf("rx pop callback,avg time:%ld\n",
@@ -1214,21 +1183,13 @@ int sdiohal_list_push(int channel, struct mbuf_t *head,
 		      struct mbuf_t *tail, int num)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct timespec64 tm_begin, tm_end;
-#else
 	struct timespec tm_begin, tm_end;
-#endif
 	static long time_total_ns;
 	static int times_count;
 	struct mbuf_t *mbuf_node;
 	int i;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&tm_begin);
-#else
 	getnstimeofday(&tm_begin);
-#endif
 
 	if (unlikely(p_data->flag_init != true))
 		return -ENODEV;
@@ -1284,15 +1245,9 @@ int sdiohal_list_push(int channel, struct mbuf_t *head,
 
 		sdiohal_tx_list_enq(channel, head, tail, num);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&tm_end);
-		time_total_ns += timespec64_to_ns(&tm_end) -
-				 timespec64_to_ns(&tm_begin);
-#else
 		getnstimeofday(&tm_end);
-		time_total_ns += timespec_to_ns(&tm_end) -
-				 timespec_to_ns(&tm_begin);
-#endif
+		time_total_ns += timespec_to_ns(&tm_end)
+			- timespec_to_ns(&tm_begin);
 		times_count++;
 		if (!(times_count % PERFORMANCE_COUNT)) {
 			sdiohal_pr_perf("tx avg time:%ld\n",
@@ -1300,11 +1255,7 @@ int sdiohal_list_push(int channel, struct mbuf_t *head,
 			time_total_ns = 0;
 			times_count = 0;
 		}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&p_data->tm_begin_sch);
-#else
 		getnstimeofday(&p_data->tm_begin_sch);
-#endif
 
 		sdiohal_tx_up();
 	} else

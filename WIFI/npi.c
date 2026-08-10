@@ -44,26 +44,14 @@ static int sprdwl_get_flag(void)
 		wl_err("open file:%s failed\n", SPRDWL_PSM_PATH);
 		return PTR_ERR(fp);
 	}
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	fs = force_uaccess_begin();
-#else
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-#endif
-#endif
 
 	pos = &fp->f_pos;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	kernel_read(fp, file_data, 1, pos);
-#else
 	vfs_read(fp, file_data, 1, pos);
-#endif
 
 	filp_close(fp, NULL);
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 10, 0)
 	set_fs(fs);
-#endif
 
 	file_data[1] = 0;
 	if (kstrtoull(file_data, 10, &tmp)) {
@@ -110,13 +98,8 @@ static int sprdwl_cmd_set_psm_cap(struct sprdwl_vif *vif)
 	return ret;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 static int sprdwl_npi_pre_doit(const struct genl_ops *ops,
 			       struct sk_buff *skb, struct genl_info *info)
-#else
-static int sprdwl_npi_pre_doit(struct genl_ops *ops,
-			       struct sk_buff *skb, struct genl_info *info)
-#endif
 {
 	struct net_device *ndev;
 	struct sprdwl_vif *vif;
@@ -146,13 +129,8 @@ static int sprdwl_npi_pre_doit(struct genl_ops *ops,
 	return 0;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 static void sprdwl_npi_post_doit(const struct genl_ops *ops,
 				 struct sk_buff *skb, struct genl_info *info)
-#else
-static void sprdwl_npi_post_doit(struct genl_ops *ops,
-				 struct sk_buff *skb, struct genl_info *info)
-#endif
 {
 	if (info->user_ptr[0])
 		dev_put(info->user_ptr[0]);
@@ -283,12 +261,11 @@ static int sprdwl_nl_get_info_handler(struct sk_buff *skb_2,
 	return ret;
 }
 
-#if KERNEL_VERSION(5, 2, 0) > LINUX_VERSION_CODE
+/*
 static struct nla_policy sprdwl_genl_policy[SPRDWL_NL_ATTR_MAX + 1] = {
 	[SPRDWL_NL_ATTR_AP2CP] = {.type = NLA_BINARY, .len = 1024},
 	[SPRDWL_NL_ATTR_CP2AP] = {.type = NLA_BINARY, .len = 1024}
-};
-#endif
+};*/
 
 static struct genl_ops sprdwl_nl_ops[] = {
 	{

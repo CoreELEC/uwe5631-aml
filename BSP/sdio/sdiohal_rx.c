@@ -79,9 +79,6 @@ static int sdiohal_rx_list_parser(struct sdiohal_list_t *data_list,
 	int inout = 0, channel = 0;
 	unsigned int parse_len;
 
-	ktime_t kt;
-	u32 sec;
-
 	sdiohal_list_check(data_list, __func__, SDIOHAL_READ);
 
 	node_num = data_list->node_num;
@@ -106,21 +103,6 @@ static int sdiohal_rx_list_parser(struct sdiohal_list_t *data_list,
 					    puh->len);
 				continue;
 			}
-
-			kt = ktime_get();
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-			sec = (u32)(div_u64(kt, NSEC_PER_SEC));
-#else/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
-			sec = (u32)(div_u64(kt.tv64, NSEC_PER_SEC));
-#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
-			p_data->throughtput_rx.bytes += puh->len;
-			if (p_data->throughtput_rx.sec != sec) {
-				p_data->throughtput_rx.throughtput = (p_data->throughtput_rx.bytes * 8) >> 10;
-				p_data->throughtput_rx.sec = sec;
-				p_data->throughtput_rx.bytes = 0;
-				sdiohal_pr_perf("tp_rx: %d Kbps\n", p_data->throughtput_rx.throughtput);
-			}
-
 			p_data->rx_packer_cnt++;
 			mbuf_node->len = MAX_MBUF_SIZE;
 			sdiohal_data_list_assignment(mbuf_node, puh, channel);
@@ -149,9 +131,6 @@ static int sdiohal_rx_buf_parser(char *data_buf, int valid_len)
 	unsigned char *p = NULL;
 	unsigned int parse_len;
 
-	ktime_t kt;
-	u32 sec;
-
 	puh = (struct sdio_puh_t *)data_buf;
 	for (parse_len = 0; parse_len < valid_len;) {
 		if (puh->eof != 0)
@@ -172,21 +151,6 @@ static int sdiohal_rx_buf_parser(char *data_buf, int valid_len)
 					    puh->len);
 				continue;
 			}
-
-			kt = ktime_get();
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-			sec = (u32)(div_u64(kt, NSEC_PER_SEC));
-#else/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
-			sec = (u32)(div_u64(kt.tv64, NSEC_PER_SEC));
-#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
-			p_data->throughtput_rx.bytes += puh->len;
-			if (p_data->throughtput_rx.sec != sec) {
-				p_data->throughtput_rx.throughtput = (p_data->throughtput_rx.bytes * 8) >> 10;
-				p_data->throughtput_rx.sec = sec;
-				p_data->throughtput_rx.bytes = 0;
-				sdiohal_pr_perf("tp_rx: %d Kbps\n", p_data->throughtput_rx.throughtput);
-			}
-
 			p_data->rx_packer_cnt++;
 
 			data_list = sdiohal_get_rx_mbuf_node(1);
@@ -235,12 +199,8 @@ int sdiohal_rx_thread(void *data)
 	unsigned int rx_dtbs = 0;
 	unsigned int valid_len = 0;
 	static char *rx_buf;
-	struct sdiohal_list_t *data_list;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct timespec64 tm_begin, tm_end;
-#else
+	struct sdiohal_list_t *data_list = NULL;
 	struct timespec tm_begin, tm_end;
-#endif
 	static long time_total_ns;
 	static int times_count;
 
@@ -263,27 +223,16 @@ int sdiohal_rx_thread(void *data)
 			continue;
 		}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&p_data->tm_end_irq);
-		sdiohal_pr_perf("rx sch time:%ld\n",
-				(long)(timespec64_to_ns(&p_data->tm_end_irq) -
-				timespec64_to_ns(&p_data->tm_begin_irq)));
-#else
 		getnstimeofday(&p_data->tm_end_irq);
 		sdiohal_pr_perf("rx sch time:%ld\n",
-				(long)(timespec_to_ns(&p_data->tm_end_irq) -
-				timespec_to_ns(&p_data->tm_begin_irq)));
-#endif
+				(long)(timespec_to_ns(&p_data->tm_end_irq)
+				- timespec_to_ns(&p_data->tm_begin_irq)));
 
 		sdiohal_resume_wait();
 		sdiohal_cp_rx_wakeup(PACKER_RX);
 
 read_again:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&tm_begin);
-#else
 		getnstimeofday(&tm_begin);
-#endif
 
 		if (p_data->adma_rx_enable) {
 			/* read len is packet num */
@@ -363,15 +312,9 @@ read_again:
 		}
 
 submit_list:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ktime_get_real_ts64(&tm_end);
-		time_total_ns += timespec64_to_ns(&tm_end) -
-				 timespec64_to_ns(&tm_begin);
-#else
 		getnstimeofday(&tm_end);
-		time_total_ns += timespec_to_ns(&tm_end) -
-				 timespec_to_ns(&tm_begin);
-#endif
+		time_total_ns += timespec_to_ns(&tm_end)
+			- timespec_to_ns(&tm_begin);
 		times_count++;
 		if (!(times_count % PERFORMANCE_COUNT)) {
 			sdiohal_pr_perf("rx list avg time:%ld\n",

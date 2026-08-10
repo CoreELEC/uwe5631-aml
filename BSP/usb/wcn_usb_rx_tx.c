@@ -11,7 +11,7 @@
 #define TRANSF_UNITS 16
 #define TRANSF_TOTAL 10
 
-#define WCN_USB_MEMCOPY 128
+#define WCN_USB_MEMCOPY 64
 #define WIFIDATA_OUT_ALIGNMENT 1600
 #define WIFIDATA_IN_ALIGNMENT 1620
 
@@ -397,13 +397,8 @@ static void wcn_usb_deal_partial_fail(int chn, struct mbuf_t *head,
 {
 	struct mchn_ops_t *mchn_ops;
 	int ret;
-	struct wcn_usb_work_data *work_data;
 
-	work_data = wcn_usb_store_get_channel_info(chn);
-	if (!work_data)
-		return;
-
-	mutex_lock(&work_data->channel_lock);
+	mutex_lock(&wcn_usb_store_get_channel_info(chn)->channel_lock);
 	mchn_ops = chn_ops(chn);
 	if (!wcn_usb_channel_is_rx(chn) && mchn_ops && mchn_ops->pop_link) {
 		channel_debug_mbuf_to_user(chn, num);
@@ -416,7 +411,7 @@ static void wcn_usb_deal_partial_fail(int chn, struct mbuf_t *head,
 			wcn_usb_err("%s %d pop_link mis\n", __func__, __LINE__);
 		wcn_usb_mbuf_list_destroy(chn, head, tail, num);
 	}
-	mutex_unlock(&work_data->channel_lock);
+	mutex_unlock(&wcn_usb_store_get_channel_info(chn)->channel_lock);
 }
 
 /**
@@ -616,8 +611,8 @@ static int rx_copy_work_func(void *work)
 	do {
 		struct sched_param param;
 
-		param.sched_priority = 1;
-		sched_setscheduler(current, SCHED_RR, &param);
+		param.sched_priority = -20;
+		sched_setscheduler(current, SCHED_FIFO, &param);
 	} while (0);
 
 	copy_kthread = (struct wcn_usb_copy_kthread *)work;
@@ -658,7 +653,7 @@ GET_RX_TX_HEAD:
 		}
 	}
 
-	wait_for_completion_interruptible(&copy_kthread->callback_complete);
+	wait_for_completion(&copy_kthread->callback_complete);
 	goto GET_RX_TX_HEAD;
 
 	return 0;
@@ -712,8 +707,8 @@ static int tx_copy_work_func(void *work)
 	do {
 		struct sched_param param;
 
-		param.sched_priority = 1;
-		sched_setscheduler(current, SCHED_RR, &param);
+		param.sched_priority = -20;
+		sched_setscheduler(current, SCHED_FIFO, &param);
 	} while (0);
 
 	copy_kthread = (struct wcn_usb_copy_kthread *)work;
@@ -737,7 +732,7 @@ GET_NEXT_MBUF:
 			buf = NULL;
 			buf_size = 0;
 		}
-		wait_for_completion_interruptible(&copy_kthread->callback_complete);
+		wait_for_completion(&copy_kthread->callback_complete);
 		goto GET_NEXT_MBUF;
 	}
 
@@ -1374,6 +1369,11 @@ unsigned long long wcn_usb_get_rx_tx_cnt(void)
 	return wcn_usb_rx_tx_cnt;
 }
 
+#if (defined(CONFIG_WCN_USB) && defined(CONFIG_MTK_BOARD))
+extern void marlin_power_lock(void);
+extern void marlin_power_unlock(void);
+extern bool marlin_get_download_status(void);
+#endif
 static void wcn_usb_rx_trash(int chn, int num);
 int wcn_usb_work_func(void *work)
 {
@@ -1389,12 +1389,14 @@ int wcn_usb_work_func(void *work)
 #endif
 	work_data = (struct wcn_usb_work_data *)work;
 
+#if 0
 	do {
 		struct sched_param param;
 
 		param.sched_priority = 1;
-		sched_setscheduler(current, SCHED_RR, &param);
+		sched_setscheduler(current, SCHED_FIFO, &param);
 	} while (0);
+#endif
 
 GET_RX_TX_HEAD:
 	reinit_completion(&work_data->callback_complete);
@@ -1465,15 +1467,24 @@ RX_TX_LIST_HANDLE:
 				work_data->transfer_remains = ret;
 			}
 		} else {
-			wcn_usb_rx_trash(work_data->channel,
-					work_data->transfer_remains);
+#if (defined(CONFIG_WCN_USB) && defined(CONFIG_MTK_BOARD))
+			marlin_power_lock();
+			if (marlin_get_download_status())
+#endif
+			{
+				wcn_usb_rx_trash(work_data->channel,
+					 work_data->transfer_remains);
+			}
+#if (defined(CONFIG_WCN_USB) && defined(CONFIG_MTK_BOARD))
+			marlin_power_unlock();
+#endif
 			work_data->transfer_remains = 0;
 		}
 	}
 
 	wake_up(&work_data->work_completion);
 	if (!work_data->transfer_remains)
-		wait_for_completion_interruptible(&work_data->callback_complete);
+		wait_for_completion(&work_data->callback_complete);
 	else
 		msleep(100);
 	goto GET_RX_TX_HEAD;
@@ -1522,18 +1533,18 @@ int wcn_usb_apostle_fire(int chn, void (*fn)(struct wcn_usb_packet *packet))
 		return -ENODEV;
 
 	apostle = wcn_usb_kzalloc(sizeof(struct wcn_usb_rx_apostle),
-			GFP_ATOMIC);
+			GFP_KERNEL);
 	if (!apostle)
 		return -ENOMEM;
 
 	apostle->chn = chn;
-	apostle->packet = wcn_usb_alloc_packet(GFP_ATOMIC);
+	apostle->packet = wcn_usb_alloc_packet(GFP_KERNEL);
 	if (!apostle->packet) {
 		ret = -ENOMEM;
 		goto FREE_APOSTLE;
 	}
 
-	ret = wcn_usb_packet_bind(apostle->packet, ep, GFP_ATOMIC);
+	ret = wcn_usb_packet_bind(apostle->packet, ep, GFP_KERNEL);
 	if (ret)
 		goto FREE_APOSTLE_PACKET;
 
@@ -1542,14 +1553,14 @@ int wcn_usb_apostle_fire(int chn, void (*fn)(struct wcn_usb_packet *packet))
 	if (wcn_usb_channel_is_sg(chn) || wcn_usb_channel_is_copy(chn))
 		apostle->buf_size = apostle->buf_size * TRANSF_UNITS + 1;
 
-	apostle->buf = wcn_usb_kzalloc(apostle->buf_size, GFP_ATOMIC);
+	apostle->buf = wcn_usb_kzalloc(apostle->buf_size, GFP_KERNEL);
 	if (!apostle->buf) {
 		ret = -ENOMEM;
 		goto FREE_APOSTLE_PACKET;
 	}
 
 	ret = wcn_usb_packet_set_buf(apostle->packet, apostle->buf,
-			apostle->buf_size, GFP_ATOMIC);
+			apostle->buf_size, GFP_KERNEL);
 	if (ret)
 		goto FREE_APOSTLE_BUF;
 
@@ -1592,7 +1603,7 @@ static void wcn_usb_rx_trash(int chn, int num)
 
 struct int_info {
 	unsigned int count;
-	unsigned short report_num[8];
+	unsigned short report_num[6];
 };
 
 #define loop_check_cmd "at+loopcheck\r"
@@ -1648,7 +1659,6 @@ static void wcn_usb_rx_apostle_callback(struct wcn_usb_packet *packet)
 	if (ret) {
 		wcn_usb_info_ratelimited("%s get apostle error[%d]\n",
 					 __func__, ret);
-		udelay(300);
 		goto RESUBMIT_PACKET;
 	}
 	total_len = wcn_usb_packet_recv_len(packet);
@@ -1680,9 +1690,6 @@ static void wcn_usb_rx_apostle_callback(struct wcn_usb_packet *packet)
 
 		channel = report_num_map_chn[i];
 		work_data = wcn_usb_store_get_channel_info(channel);
-		if (!work_data)
-			continue;
-
 		spin_lock(&work_data->lock);
 		work_data->report_num = apostle_info->report_num[i];
 		spin_unlock(&work_data->lock);

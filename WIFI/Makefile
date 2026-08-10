@@ -1,12 +1,11 @@
 PWD := $(shell pwd)
 all_dependencies := driver
-
-KBUILD_EXTRA_SYMBOLS := $(M)/../BSP/Module.symvers
-
+ccflags-y += -I/home2/tianqu.gan/aml/aml/5621/unisoc/uwe5621ds/BSP/include
+ccflags-y += -Wno-implicit-function-declaration -Wno-macro-redefined -Wno-sometimes-uninitialized
 ifneq ($(UNISOC_BSP_INCLUDE),)
 ccflags-y += -I$(UNISOC_BSP_INCLUDE)
 endif
-ccflags-y += -I$(M)/../BSP/include/
+ccflags-y += -I$(KERNEL_SRC)/$(M)/../BSP/include/
 ifneq ($(UNISOC_WIFI_CUS_CONFIG),)
 ccflags-y += -DCUSTOMIZE_WIFI_CFG_PATH=\"$(UNISOC_WIFI_CUS_CONFIG)\"
 endif
@@ -33,27 +32,25 @@ ccflags-y += -DRND_MAC_SUPPORT
 #ccflags-y += -DSOFTAP_HOOK
 ccflags-y += -DATCMD_ASSERT
 ccflags-y += -DTCPACK_DELAY_SUPPORT
-#ccflags-y += -DTCPACK_DROP_DYNAMIC
-
 #ccflags-y += -DDFS_MASTER
-ccflags-y += -DRX_NAPI
+#ccflags-y += -DRX_NAPI
 ifneq ($(TARGET_BUILD_VARIANT),user)
 ccflags-y += -DWL_CONFIG_DEBUG
 endif
-#ccflags-y += -DSPLIT_STACK
-ccflags-y += -DSPRD_RX_THREAD
+ccflags-y += -DSPLIT_STACK
 ccflags-y += -DOTT_UWE
-ccflags-y += -DCP2_RESET_SUPPORT
+#ccflags-y += -DCP2_RESET_SUPPORT
 ifeq ($(UNISOC_STA_SOFTAP_SCC_MODE),y)
 ccflags-y += -DSTA_SOFTAP_SCC_MODE
 endif
 
+ccflags-$(CONFIG_UNISOC_WIFI_PS) += -DUNISOC_WIFI_PS
 ccflags-y += -DPPPOE_LLC_SUPPORT
+ccflags-y += -DSYNC_DISCONNECT
 #ccflags-y += -DSPRDWL_TX_SELF
 #ccflags-y += -DTCP_ACK_DROP_SUPPORT
-ccflags-y += -DWOW_SUPPORT
-#ccflags-y += -DCPUFREQ_UPDATE_SUPPORT
-#ccflags-y += -DCUSTOM_REGDOMAIN
+#ccflags-y += -DWOW_SUPPORT -DCONFIG_PM
+
 #####module name ###
 obj-m += $(MODULE_NAME).o
 

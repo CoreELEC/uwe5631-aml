@@ -32,13 +32,11 @@
 /* auth type */
 #define SPRDWL_AUTH_OPEN		0
 #define SPRDWL_AUTH_SHARED		1
-#define SPRDWL_AUTH_SAE			4
 /* parise or group key type */
 #define SPRDWL_GROUP			0
 #define SPRDWL_PAIRWISE			1
 /* cipher suite */
 #define WLAN_CIPHER_SUITE_PMK           0x000FACFF
-#define WLAN_CIPHER_SUITE_DPP		0x506F9A02
 /* AKM suite */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 #define WLAN_AKM_SUITE_FT_8021X		0x000FAC03
@@ -46,9 +44,6 @@
 #endif
 #define WLAN_AKM_SUITE_WAPI_CERT	0x00147201
 #define WLAN_AKM_SUITE_WAPI_PSK		0x00147202
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
-#define WLAN_AKM_SUITE_OWE		0x000FAC12
-#endif
 
 #define SPRDWL_AKM_SUITE_NONE		(0)
 #define SPRDWL_AKM_SUITE_8021X		(1)
@@ -58,9 +53,7 @@
 #define SPRDWL_AKM_SUITE_WAPI_PSK	(4)
 #define SPRDWL_AKM_SUITE_8021X_SHA256	(5)
 #define SPRDWL_AKM_SUITE_PSK_SHA256	(6)
-#define SPRDWL_AKM_SUITE_SAE		(8)
 #define SPRDWL_AKM_SUITE_WAPI_CERT	(12)
-#define SPRDWL_AKM_SUITE_OWE		(18)
 
 /* determine the actual values for the macros below*/
 #define SPRDWL_MAX_SCAN_SSIDS		12
@@ -79,8 +72,6 @@
 #define CH_MAX_5G_CHANNEL			(25)
 #define TOTAL_2G_5G_CHANNEL_NUM			(39)/*14+25=39*/
 #define TOTAL_2G_5G_SSID_NUM         9
-
-#define MGMT_REG_MASK_BIT 32
 
 enum sprdwl_mode {
 	SPRDWL_MODE_NONE,
@@ -103,8 +94,7 @@ enum sm_state {
 	SPRDWL_DISCONNECTING,
 	SPRDWL_DISCONNECTED,
 	SPRDWL_CONNECTING,
-	SPRDWL_CONNECTED,
-	SPRDWL_DRIVER_DISCONNECTING
+	SPRDWL_CONNECTED
 };
 
 enum connect_result {
@@ -218,12 +208,4 @@ void sprdwl_report_tdls(struct sprdwl_vif *vif, const u8 *peer,
 void sprdwl_report_fake_probe(struct wiphy *wiphy, u8 *ie, size_t ielen);
 int sprdwl_change_beacon(struct sprdwl_vif *vif,
 		struct cfg80211_beacon_data *beacon);
-int sprdwl_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev,
-				   struct cfg80211_connect_params *sme);
-int sprdwl_cfg80211_disconnect(struct wiphy *wiphy,
-				      struct net_device *ndev, u16 reason_code);
-void sprdwl_cancel_scan(struct sprdwl_vif *vif);
-void sprdwl_cancel_sched_scan(struct sprdwl_vif *vif);
-void sprdwl_reg_notify(struct wiphy *wiphy,
-			      struct regulatory_request *request);
 #endif

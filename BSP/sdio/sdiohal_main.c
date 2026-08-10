@@ -34,12 +34,8 @@
 #include "sdiohal.h"
 #include "wcn_glb.h"
 
-#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
-#ifdef CONFIG_GK6323AB
-extern int mmc_sdio_set_detect(int sdio_det);
-#else
+#ifdef CONFIG_HISI_BOARD
 #include "mach/hardware.h"
-#endif
 #endif
 
 #ifdef CONFIG_AML_BOARD
@@ -48,7 +44,6 @@ extern int mmc_sdio_set_detect(int sdio_det);
 extern int wifi_irq_num(void);
 extern int wifi_irq_trigger_level(void);
 extern void sdio_reinit(void);
-extern void sdio_clk_always_on(int on);
 extern void sdio_set_max_regs(unsigned int size);
 #endif
 
@@ -77,10 +72,7 @@ extern int sunxi_wlan_get_oob_irq_flags(void);
 #define IS_BYPASS_WAKE(addr) (false)
 #endif
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 18, 20)
 extern void mmc_power_up(struct mmc_host *host, u32 ocr);
-extern void mmc_power_off(struct mmc_host *host);
-#endif
 
 static int (*scan_card_notify)(void);
 struct sdiohal_data_t *sdiohal_data;
@@ -110,14 +102,6 @@ static void sdiohal_card_unlock(struct sdiohal_data_t *p_data)
 struct sdiohal_data_t *sdiohal_get_data(void)
 {
 	return sdiohal_data;
-}
-
-unsigned char sdiohal_get_wl_wake_host_en(void)
-{
-	if(marlin_get_bt_wl_wake_host_en() & BIT(WL_WAKE_HOST))
-		return WL_WAKE_HOST;
-	else
-		return WL_NO_WAKE_HOST;
 }
 
 unsigned char sdiohal_get_tx_mode(void)
@@ -252,23 +236,12 @@ unsigned int sdiohal_get_trans_pac_num(void)
 int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	int ret;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct timespec64 tm_begin, tm_end;
-#else
+	int ret = 0;
 	struct timespec tm_begin, tm_end;
-#endif
 	static long time_total_ns;
 	static int times_count;
 
-	ktime_t kt;
-	u32 sec;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&tm_begin);
-#else
 	getnstimeofday(&tm_begin);
-#endif
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
 		return -ENODEV;
@@ -281,21 +254,6 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 
 	if (sdiohal_card_lock(p_data, __func__))
 		return -1;
-
-	kt = ktime_get();
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-	sec = (u32)(div_u64(kt, NSEC_PER_SEC));
-#else/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
-	sec = (u32)(div_u64(kt.tv64, NSEC_PER_SEC));
-#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
-	p_data->throughtput_tx.bytes += datalen;
-	if (p_data->throughtput_tx.sec != sec) {
-		p_data->throughtput_tx.throughtput = (p_data->throughtput_tx.bytes * 8) >> 10;
-		p_data->throughtput_tx.sec = sec;
-		p_data->throughtput_tx.bytes = 0;
-		sdiohal_pr_perf("tp_tx: %d Kbps\n", p_data->throughtput_tx.throughtput);
-	}
-
 
 	sdiohal_resume_check();
 	sdiohal_op_enter();
@@ -310,13 +268,8 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&tm_end);
-	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
-#else
 	getnstimeofday(&tm_end);
 	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
-#endif
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("tx avg time:%ld len=%d\n",
@@ -331,20 +284,12 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 int sdiohal_sdio_pt_read(unsigned char *src, unsigned int datalen)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	int ret;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct timespec64 tm_begin, tm_end;
-#else
+	int ret = 0;
 	struct timespec tm_begin, tm_end;
-#endif
 	static long time_total_ns;
 	static int times_count;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&tm_begin);
-#else
 	getnstimeofday(&tm_begin);
-#endif
 
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -365,13 +310,8 @@ int sdiohal_sdio_pt_read(unsigned char *src, unsigned int datalen)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&tm_end);
-	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
-#else
 	getnstimeofday(&tm_end);
 	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
-#endif
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("rx avg time:%ld len=%d\n",
@@ -398,9 +338,6 @@ static int sdiohal_config_packer_chain(struct sdiohal_list_t *data_list,
 	unsigned int sg_count, sg_data_size;
 	unsigned int i, ttl_len = 0, node_num;
 	int err_ret = 0;
-
-	ktime_t kt;
-	u32 sec;
 
 	node_num = data_list->node_num;
 	if (node_num > MAX_CHAIN_NODE_NUM)
@@ -478,22 +415,6 @@ static int sdiohal_config_packer_chain(struct sdiohal_list_t *data_list,
 
 	sdiohal_debug("ttl len:%d sg_count:%d\n", ttl_len, sg_count);
 
-	if (dir == SDIOHAL_WRITE) {
-		kt = ktime_get();
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-		sec = (u32)(div_u64(kt, NSEC_PER_SEC));
-#else/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
-		sec = (u32)(div_u64(kt.tv64, NSEC_PER_SEC));
-#endif/*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)*/
-		p_data->throughtput_tx.bytes += ttl_len;
-		if (p_data->throughtput_tx.sec != sec) {
-			p_data->throughtput_tx.throughtput = (p_data->throughtput_tx.bytes * 8) >> 10;
-			p_data->throughtput_tx.sec = sec;
-			p_data->throughtput_tx.bytes = 0;
-			sdiohal_pr_perf("tp_tx: %d Kbps\n", p_data->throughtput_tx.throughtput);
-		}
-	}
-
 	blk_num = ttl_len / blk_size;
 	mmc_dat.sg = p_data->sg_list;
 	mmc_dat.sg_len = sg_count;
@@ -535,20 +456,12 @@ static int sdiohal_config_packer_chain(struct sdiohal_list_t *data_list,
 int sdiohal_adma_pt_write(struct sdiohal_list_t *data_list)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	int ret;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct timespec64 tm_begin, tm_end;
-#else
+	int ret = 0;
 	struct timespec tm_begin, tm_end;
-#endif
 	static long time_total_ns;
 	static int times_count;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&tm_begin);
-#else
 	getnstimeofday(&tm_begin);
-#endif
 
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -571,13 +484,8 @@ int sdiohal_adma_pt_write(struct sdiohal_list_t *data_list)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&tm_end);
-	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
-#else
 	getnstimeofday(&tm_end);
 	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
-#endif
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("tx avg time:%ld\n",
@@ -592,20 +500,12 @@ int sdiohal_adma_pt_write(struct sdiohal_list_t *data_list)
 int sdiohal_adma_pt_read(struct sdiohal_list_t *data_list)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	int ret;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct timespec64 tm_begin, tm_end;
-#else
+	int ret = 0;
 	struct timespec tm_begin, tm_end;
-#endif
 	static long time_total_ns;
 	static int times_count;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&tm_begin);
-#else
 	getnstimeofday(&tm_begin);
-#endif
 
 	if (unlikely(p_data->card_dump_flag == true)) {
 		sdiohal_err("%s line %d dump happened\n", __func__, __LINE__);
@@ -626,13 +526,8 @@ int sdiohal_adma_pt_read(struct sdiohal_list_t *data_list)
 	sdiohal_op_leave();
 	sdiohal_card_unlock(p_data);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&tm_end);
-	time_total_ns += timespec64_to_ns(&tm_end) - timespec64_to_ns(&tm_begin);
-#else
 	getnstimeofday(&tm_end);
 	time_total_ns += timespec_to_ns(&tm_end) - timespec_to_ns(&tm_begin);
-#endif
 	times_count++;
 	if (!(times_count % PERFORMANCE_COUNT)) {
 		sdiohal_pr_perf("rx avg time:%ld\n",
@@ -1275,11 +1170,7 @@ static irqreturn_t sdiohal_irq_handler(int irq, void *para)
 	sdiohal_lock_rx_ws();
 	sdiohal_disable_rx_irq(irq);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	ktime_get_real_ts64(&p_data->tm_begin_irq);
-#else
 	getnstimeofday(&p_data->tm_begin_irq);
-#endif
 	sdiohal_rx_up();
 
 	return IRQ_HANDLED;
@@ -1619,9 +1510,6 @@ static void sdiohal_shutdown(struct device *dev)
 	}
 
 #ifdef CONFIG_WCN_SLP
-#ifndef CONFIG_WCN_TXRX_NSLP
-	slp_mgr_drv_sleep(SUBSYS_MAX, true);
-#endif
 	sdio_wait_pub_int_done();
 	sdio_record_power_notify(false);
 #endif
@@ -1693,9 +1581,7 @@ static int sdiohal_suspend(struct device *dev)
 	}
 
 #ifdef CONFIG_WCN_SLP
-#ifndef CONFIG_WCN_TXRX_NSLP
 	slp_mgr_drv_sleep(SUBSYS_MAX, true);
-#endif
 	sdio_wait_pub_int_done();
 	sdio_record_power_notify(false);
 #endif
@@ -1754,7 +1640,7 @@ static int sdiohal_resume(struct device *dev)
 #if KERNEL_VERSION(4, 18, 20) >= LINUX_VERSION_CODE
 	mmc_power_save_host(p_data->sdio_dev_host);
 #else
-	mmc_power_off(p_data->sdio_dev_host);
+	mmc_power_off(p_data->sdio_dev_host, p_data->sdio_dev_host->card->ocr);
 #endif
 	mdelay(5);
 #if KERNEL_VERSION(4, 18, 20) >= LINUX_VERSION_CODE
@@ -1786,20 +1672,6 @@ static int sdiohal_resume(struct device *dev)
 	atomic_set(&p_data->flag_resume, 1);
 	if (!WCN_CARD_EXIST(&p_data->xmit_cnt))
 		atomic_sub(SDIOHAL_REMOVE_CARD_VAL, &p_data->xmit_cnt);
-
-#if (defined CONFIG_WCN_SLP) && (!defined CONFIG_WCN_TXRX_NSLP)
-#ifdef CONFIG_AML_BOARD
-	udelay(500);
-	sdio_clk_always_on(1);
-	udelay(900);
-#endif
-	slp_mgr_wakeup(SUBSYS_MAX);
-#ifdef CONFIG_AML_BOARD
-	udelay(500);
-	sdio_clk_always_on(0);
-	udelay(500);
-#endif
-#endif
 
 #ifdef CONFIG_WCN_RESUME_KEEPPWR_RESETSDIO
 	/* After resume will reset sdio reg, re-enable sdio int. */
@@ -1871,6 +1743,8 @@ static int sdiohal_resume(struct device *dev)
 		(p_data->irq_num > 0))
 		enable_irq(p_data->irq_num);
 #endif
+
+	slp_mgr_wakeup(SUBSYS_MAX);
 
 	for (chn = 0; chn < SDIO_CHANNEL_NUM; chn++) {
 		sdiohal_ops = chn_ops(chn);
@@ -2059,14 +1933,7 @@ void sdiohal_reset(bool full_reset)
 }
 #endif
 
-#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
-#ifdef CONFIG_GK6323AB
-void sdiohal_set_card_present(bool enable)
-{
-	sdiohal_info("%s enable:%d\n", __func__, enable);
-	mmc_sdio_set_detect(enable);
-}
-#else
+#ifdef CONFIG_HISI_BOARD
 #define REG_BASE_CTRL __io_address(0xf8a20008)
 void sdiohal_set_card_present(bool enable)
 {
@@ -2082,7 +1949,6 @@ void sdiohal_set_card_present(bool enable)
 		regval &= ~0x1;
 	writel(regval, REG_BASE_CTRL);
 }
-#endif
 #endif
 
 static int sdiohal_probe(struct sdio_func *func,
@@ -2124,10 +1990,10 @@ static int sdiohal_probe(struct sdio_func *func,
 		return -1;
 	}
 	sdiohal_debug("get host ok!!!");
-#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
+#ifdef CONFIG_HISI_BOARD
 /**
  * max_blk_count default is 256
- * MAX_CHAIN_NODE_NUM * MAX_MBUF_SIZE / (CONFIG_SDIO_BLKSIZE)
+ * MAX_CHAIN_NODE_NUM * MAX_MBUF_SIZE / (CONFIG_SDIO_BLKSIZE) 
  * should max than max_blk_count
 */
 		p_data->sdio_dev_host->max_blk_count = 512;
@@ -2204,7 +2070,7 @@ static void sdiohal_remove(struct sdio_func *func)
 
 	sdiohal_info("[%s]enter\n", __func__);
 
-#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
+#ifdef CONFIG_HISI_BOARD
 	sdiohal_set_card_present(0);
 #endif
 
@@ -2214,11 +2080,7 @@ static void sdiohal_remove(struct sdio_func *func)
 	complete(&p_data->remove_done);
 
 	if(NULL != p_data->sdio_func[FUNC_0])
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		kfree_sensitive(p_data->sdio_func[FUNC_0]);
-#else
 		kzfree(p_data->sdio_func[FUNC_0]);
-#endif
 
 	if (p_data->irq_type == SDIOHAL_RX_INBAND_IRQ) {
 		sdio_claim_host(p_data->sdio_func[FUNC_1]);
@@ -2313,7 +2175,7 @@ void sdiohal_remove_card(void)
 
 	init_completion(&p_data->remove_done);
 
-#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
+#ifdef CONFIG_HISI_BOARD
 	sdiohal_set_card_present(0);
 #endif
 
@@ -2411,8 +2273,8 @@ int sdiohal_scan_card(void)
 		msleep(100);
 	}
 
-#if defined(CONFIG_HISI_BOARD) || defined(CONFIG_GOKE_BOARD)
-	/* only for hisi mv300 or goke scan card mechanism */
+#ifdef CONFIG_HISI_BOARD
+	/* only for hisi mv300 scan card mechanism */
 	sdiohal_set_card_present(1);
 #endif
 

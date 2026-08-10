@@ -2,8 +2,6 @@
 #define __DEFRAG__H__
 
 #include <linux/skbuff.h>
-#include "sprdwl.h"
-#include "wl_core.h"
 
 #define MAX_DEFRAG_NUM 3
 
@@ -33,7 +31,5 @@ void sprdwl_defrag_deinit(struct sprdwl_rx_defrag_entry *defrag_entry);
 struct sk_buff
 *defrag_data_process(struct sprdwl_rx_defrag_entry *defrag_entry,
 		     struct sk_buff *pskb);
-
-void sprdwl_defrag_recover(struct sprdwl_intf *intf, struct sprdwl_vif *vif);
 
 #endif /*__DEFRAG__H__*/

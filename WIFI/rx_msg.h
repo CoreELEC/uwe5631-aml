@@ -50,11 +50,10 @@ struct sprdwl_rx_if {
 	struct work_struct rx_work;
 	struct workqueue_struct *rx_queue;
 #endif
-	struct sk_buff_head net_rx_list;
 #ifdef RX_NAPI
+	struct sprdwl_msg_list rx_data_list;
 	struct napi_struct napi_rx;
-	bool napi_rx_enable;
-#endif/*RX_NAPI*/
+#endif
 
 	struct sprdwl_mm mm_entry;
 	struct sprdwl_rx_ba_entry ba_entry;
@@ -69,10 +68,6 @@ struct sprdwl_rx_if {
 	unsigned long rx_total_len;
 	ktime_t rxtimebegin;
 	ktime_t rxtimeend;
-	u8  rx_snaphdr_flag;
-	u16 rx_snaphdr_seqnum;
-	u8  rx_snaphdr_lut;
-	u8  rx_snaphdr_tid;
 };
 
 struct sprdwl_addr_trans_value {
@@ -268,10 +263,7 @@ void sprdwl_rx_process(struct sprdwl_rx_if *rx_if, struct sk_buff *pskb);
 void sprdwl_rx_send_cmd(struct sprdwl_intf *intf, void *data, int len,
 			unsigned char id, unsigned char ctx_id);
 int sprdwl_pkt_log_save(struct sprdwl_intf *intf, void *data);
-#ifdef RX_NAPI
 void sprdwl_rx_napi_init(struct net_device *ndev, struct sprdwl_intf *intf);
-void sprdwl_rx_napi_deinit(struct sprdwl_intf *intf);
-#endif/*RX_NAPI*/
 #ifdef SPRD_RX_THREAD
 void rx_up(struct sprdwl_rx_if* rx_if);
 #endif

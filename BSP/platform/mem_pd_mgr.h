@@ -80,5 +80,5 @@ int mem_pd_mgr(int subsys, int val);
 int mem_pd_save_bin(void);
 int mem_pd_init(void);
 int mem_pd_exit(void);
-extern unsigned int marlin_get_wcn_chipid(void);
+unsigned int marlin_get_wcn_chipid(void);
 #endif

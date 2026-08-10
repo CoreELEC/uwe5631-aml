@@ -11,6 +11,7 @@
 #else
 #include <linux/sched.h>
 #endif
+#include "wcn_wrapper.h"
 #include <wcn_bus.h>
 #ifdef CONFIG_WCN_SLP
 #include "../sleep/sdio_int.h"
@@ -29,9 +30,6 @@
 	pr_info("sdiohal:" fmt, ## args)
 #define sdiohal_err(fmt, args...) \
 	pr_err("sdiohal err:" fmt, ## args)
-
-/* we don't need debug to be enabled */
-#undef CONFIG_DEBUG_FS
 
 #ifdef CONFIG_DEBUG_FS
 extern long int sdiohal_log_level;
@@ -56,7 +54,7 @@ extern long int sdiohal_log_level;
 	} while (0)
 #define sdiohal_pr_perf(fmt, args...) \
 	do { if (sdiohal_log_level & SDIOHAL_PERF_LEVEL) \
-		pr_err("sdiohal:" fmt, ## args); \
+		trace_printk(fmt, ## args); \
 	} while (0)
 #else
 #define sdiohal_normal(fmt, args...)
@@ -140,11 +138,7 @@ extern long int sdiohal_log_level;
 #ifdef CONFIG_CUSTOMIZE_32_BIT_RX_RECVBUF_LEN
 #define SDIOHAL_32_BIT_RX_RECVBUF_LEN (CONFIG_CUSTOMIZE_32_BIT_RX_RECVBUF_LEN << 10)
 #else
-#ifdef CONFIG_AML_BOARD
 #define SDIOHAL_32_BIT_RX_RECVBUF_LEN (128 << 10)
-#else//CONFIG_AML_BOARD
-#define SDIOHAL_32_BIT_RX_RECVBUF_LEN (32 << 10)
-#endif //CONFIG_AML_BOARD
 #endif
 #define SDIOHAL_FRAG_PAGE_MAX_ORDER_32_BIT \
 	get_order(SDIOHAL_32_BIT_RX_RECVBUF_LEN)
@@ -309,12 +303,6 @@ struct sdiohal_data_bak_t {
 	unsigned char data_bk[SDIOHAL_PRINTF_LEN];
 };
 
-struct sdiohal_throughtput {
-	u64 bytes;
-	u32 sec;
-	u32 throughtput;
-};
-
 struct sdiohal_data_t {
 	struct task_struct *tx_thread;
 	struct task_struct *rx_thread;
@@ -384,18 +372,11 @@ struct sdiohal_data_t {
 	unsigned long long rx_packer_cnt;
 	char *dtbs_buf;
 
-	/* for performance statistics */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct timespec64 tm_begin_sch;
-	struct timespec64 tm_end_sch;
-	struct timespec64 tm_begin_irq;
-	struct timespec64 tm_end_irq;
-#else
+	/* for performance statics */
 	struct timespec tm_begin_sch;
 	struct timespec tm_end_sch;
 	struct timespec tm_begin_irq;
 	struct timespec tm_end_irq;
-#endif
 
 	/*wakeup_source pointer*/
 	struct wakeup_source *scan_ws;
@@ -413,12 +394,9 @@ struct sdiohal_data_t {
 #endif
 	int printlog_txchn;
 	int printlog_rxchn;
-	struct sdiohal_throughtput throughtput_tx;
-	struct sdiohal_throughtput throughtput_rx;
 };
 
 struct sdiohal_data_t *sdiohal_get_data(void);
-unsigned char sdiohal_get_wl_wake_host_en(void);
 unsigned char sdiohal_get_tx_mode(void);
 unsigned char sdiohal_get_rx_mode(void);
 unsigned char sdiohal_get_irq_type(void);
@@ -449,7 +427,7 @@ void sdiohal_callback_lock(struct mutex *mutex);
 void sdiohal_callback_unlock(struct mutex *mutex);
 
 /* for sleep */
-#if 0
+#ifdef CONFIG_WCN_SLP
 void sdiohal_cp_tx_sleep(enum slp_subsys subsys);
 void sdiohal_cp_tx_wakeup(enum slp_subsys subsys);
 void sdiohal_cp_rx_sleep(enum slp_subsys subsys);
