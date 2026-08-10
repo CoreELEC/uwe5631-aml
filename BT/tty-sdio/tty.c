@@ -544,32 +544,31 @@ static ssize_t misc_node_show(struct device *dev,
 
     return 0;
 }
-#define ALL_PER 1
-
-#if ALL_PER
-    #pragma push_macro("VERIFY_OCTAL_PERMISSIONS")
-    #ifdef VERIFY_OCTAL_PERMISSIONS
-        #undef VERIFY_OCTAL_PERMISSIONS
-    #endif
-
-    #define VERIFY_OCTAL_PERMISSIONS(perms) (perms)
-#endif
-#if ALL_PER
-    static DEVICE_ATTR(at, 0777, at_show, at_store);
-    static DEVICE_ATTR(woble_set, 0777, woble_set_show, woble_set_store);
-    static DEVICE_ATTR(ant_num, 0777, ant_num_show, 0);
-    static DEVICE_ATTR(chipid, 0777, chipid_show, 0);
-    static DEVICE_ATTR(misc_node, 0777, misc_node_show, misc_node_store);
-
-    #pragma pop_macro("VERIFY_OCTAL_PERMISSIONS")
-
-#else
-    static DEVICE_ATTR(at, 0660, at_show, at_store);
-    static DEVICE_ATTR(woble_set, 0660, woble_set_show, woble_set_store);
-    static DEVICE_ATTR(ant_num, 0660, ant_num_show, 0);
-    static DEVICE_ATTR(chipid, 0660, chipid_show, 0);
-    static DEVICE_ATTR(misc_node, 0660, misc_node_show, misc_node_store);
-#endif
+/*
+ * This block used to unconditionally force 0777 (world read/write/
+ * execute) sysfs attribute permissions via ALL_PER, going as far as
+ * locally neutering the kernel's own DEVICE_ATTR() build-time sanity
+ * check (VERIFY_OCTAL_PERMISSIONS(), which normally *refuses to
+ * compile* 0777 for exactly this reason) to force it through. The
+ * 0660 branch below was permanently dead code (ALL_PER was #define'd
+ * to 1 with no way to disable it).
+ *
+ * At runtime, on top of the disabled compile-time check, sysfs's own
+ * internal_create_group() independently rejects 0777 with a kernel
+ * WARN() ("Attribute at: Invalid permissions 0777",
+ * fs/sysfs/group.c) -- confirmed via an actual boot log on a 5.15
+ * target. The driver limped on afterward (mtty_probe continues past
+ * the WARN), but this was never a supported permission mode; it's a
+ * bug, not a deliberate access-control choice worth preserving.
+ * Fixed by dropping the override entirely and always using 0660
+ * (owner+group read/write, matching what the driver's own dead
+ * "else" branch already intended).
+ */
+static DEVICE_ATTR(at, 0660, at_show, at_store);
+static DEVICE_ATTR(woble_set, 0660, woble_set_show, woble_set_store);
+static DEVICE_ATTR(ant_num, 0660, ant_num_show, 0);
+static DEVICE_ATTR(chipid, 0660, chipid_show, 0);
+static DEVICE_ATTR(misc_node, 0660, misc_node_show, misc_node_store);
 
 struct attribute *bluetooth_attrs[] =
 {

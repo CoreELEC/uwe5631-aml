@@ -115,15 +115,16 @@ struct gpio_config {
 #define RTL_REG_RST_GPIO (17)
 #endif
 
-#define WCN_FW_MAX_PATH_NUM	4
+#define WCN_FW_MAX_PATH_NUM	5
 /* path of cp2 firmware. */
 #ifdef CONFIG_CUSTOMIZE_UNISOC_FW_PATH
 #define UNISOC_FW_PATH_DEFAULT CONFIG_CUSTOMIZE_UNISOC_FW_PATH
 #else
-#define UNISOC_FW_PATH_DEFAULT "/system/etc/firmware/"
+#define UNISOC_FW_PATH_DEFAULT "/lib/firmware/unisoc/"
 #endif
 static char *wcn_fw_path[WCN_FW_MAX_PATH_NUM] = {
-	UNISOC_FW_PATH_DEFAULT,		/* most of projects */
+	UNISOC_FW_PATH_DEFAULT,	/* CoreELEC/most Unisoc-packaged builds */
+	"/system/etc/firmware/",	/* most of projects */
 	"/vendor/etc/firmware/",	/* allwinner h6/h616... */
 	"/lib/firmware/",		/* allwinner r328... */
 	"/vendor/firmware/"
@@ -131,8 +132,21 @@ static char *wcn_fw_path[WCN_FW_MAX_PATH_NUM] = {
 
 #if defined(CONFIG_WCN_SDIO)
 #define WCN_FW_NAME	"wcnmodem.bin"
+/*
+ * request_firmware() (the fast path tried first, below) uses the
+ * kernel's own firmware search mechanism, which is independent of
+ * wcn_fw_path[] (that array only backs the manual filp_open()-based
+ * fallback loop). To have this fast path also find the firmware
+ * under /lib/firmware/unisoc/, its name needs the subdirectory
+ * baked in -- request_firmware() resolves "unisoc/wcnmodem.bin"
+ * against /lib/firmware/unisoc/wcnmodem.bin, not against
+ * UNISOC_FW_PATH_DEFAULT (the two mechanisms don't share the same
+ * path list).
+ */
+#define WCN_FW_REQUEST_NAME	"unisoc/wcnmodem.bin"
 #elif defined(CONFIG_WCN_USB)
 #define WCN_FW_NAME	"wcnmodem_usb.bin"
+#define WCN_FW_REQUEST_NAME	"unisoc/wcnmodem_usb.bin"
 #endif
 
 #define GNSS_FW_NAME	"gnssmodem.bin"
@@ -1066,11 +1080,11 @@ static int marlin_request_firmware(struct marlin_firmware **mfirmware_p)
 		 * else download from backup firmware.
 		 */
 		if (marlin_dev->first_power_on_flag == 1) {
-			WCN_INFO("%s request_firmware %s start!\n", __func__, WCN_FW_NAME);
-			ret = request_firmware(&firmware, WCN_FW_NAME, NULL);
+			WCN_INFO("%s request_firmware %s start!\n", __func__, WCN_FW_REQUEST_NAME);
+			ret = request_firmware(&firmware, WCN_FW_REQUEST_NAME, NULL);
 			if (ret < 0) {
 				WCN_ERR("%s not find %s errno:(%d)(ignore!!)\n",
-					__func__, WCN_FW_NAME, ret);
+					__func__, WCN_FW_REQUEST_NAME, ret);
 				marlin_dev->is_btwf_in_sysfs = 1;
 
 				return ret;

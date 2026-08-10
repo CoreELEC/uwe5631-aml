@@ -9,9 +9,10 @@
 #include "sprdwl.h"
 
 #define LOAD_BUF_SIZE 1024
-#define MAX_PATH_NUM  3
+#define MAX_PATH_NUM  4
 
 static char *dbg_ini_file_path[MAX_PATH_NUM] = {
+	"/lib/firmware/unisoc/wifi_dbg.ini",	/* CoreELEC/most Unisoc-packaged builds */
 	"/data/misc/wifi/wifi_dbg.ini",
 	"/vendor/etc/wifi/wifi_dbg.ini",
 	"/etc/wifi_dbg.ini"

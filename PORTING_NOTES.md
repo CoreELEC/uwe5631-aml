@@ -715,6 +715,114 @@ build: `BUILD.bazel`'s `sprdwl_ng` target already has
 for propagating a sibling `ddk_module`'s `Module.symvers` -- that's
 been correct since the very first round of this port.
 
+## Tenth round: driver loads on real hardware, dmesg from first boot
+
+Real progress worth calling out: `uwe5621_bsp_sdio.ko` and
+`sprdwl_ng.ko` both load and successfully talk to the chip over SDIO
+-- `marlin_get_wcn_chipid: chipid: 0x56630001`, `sdiohal:probe ok`,
+`sdiohal:scan end!` all appear in the boot log with no errors. That's
+the actual hardware-communication path this whole port exists to
+keep working, and it's working. Both problems visible in this dmesg
+are unrelated to kernel-version porting:
+
+- **`WARNING: ... at fs/sysfs/group.c:61 internal_create_group+0x1d0/0x3e4`,
+  "Attribute at: Invalid permissions 0777", from `mtty_probe`.** This
+  is a genuine, pre-existing bug in `tty-sdio`'s `tty.c` (not
+  something introduced by this port): a hardcoded `#define ALL_PER 1`
+  unconditionally selected `0777` (world read/write/execute) for five
+  `DEVICE_ATTR()` sysfs attributes, with a `0660` branch that was
+  permanently unreachable dead code. The `0777` mode was pushed
+  through by locally neutering the kernel's own `DEVICE_ATTR()`
+  build-time sanity check (`VERIFY_OCTAL_PERMISSIONS()`, which
+  normally *refuses to compile* `0777` for exactly this reason) via a
+  `#pragma push_macro`/redefine. At runtime, sysfs's own
+  `internal_create_group()` independently rejects it with a `WARN()`
+  -- confirmed by this exact dmesg. The driver survives the warning
+  and keeps going, but it was never a supported permission mode.
+  Fixed (in the `tty-sdio` tree, `tty.c`) by removing the override
+  entirely and always using `0660`, which is what the driver's own
+  dead branch already intended.
+
+- **`Direct firmware load for wcnmodem.bin failed with error -2`,
+  eventually `WCN_ERR: marlin download timeout` /
+  `WCN_ERR: btwifi_download_firmware request firmware error`.** This
+  is not a code bug at all -- it's a missing file on the target
+  filesystem. The log shows the driver correctly trying five
+  different paths in sequence (the standard `request_firmware()`
+  hotplug path, then explicit fallbacks:
+  `/system/etc/firmware/wcnmodem.bin`,
+  `/vendor/etc/firmware/wcnmodem.bin`, `/lib/firmware/wcnmodem.bin`,
+  `/vendor/firmware/wcnmodem.bin`) and getting `ENOENT` from every
+  one. `BSP/fw/wcnmodem.bin` (830,976 bytes) is sitting right there in
+  the source tree this whole time -- it was simply never installed
+  onto CoreELEC's root filesystem. No source change can fix this: the
+  firmware blob needs to be copied to one of those paths (`/lib/firmware/wcnmodem.bin`
+  is the standard, most portable choice, and is one of the paths the
+  driver already tries) as part of packaging/deploying this driver on
+  the target device, e.g. an install step in CoreELEC's package.mk for
+  this driver that copies `BSP/fw/wcnmodem.bin` into the built image.
+
+## Eleventh round: /lib/firmware/unisoc/ as the primary firmware/.ini path
+
+Per explicit request: `/lib/firmware/unisoc/` should be the (primary)
+lookup path for both the CP2 firmware blob and the `.ini` config
+files this driver reads. Three separate path lists/defaults needed
+updating -- each of these is an independent lookup mechanism in the
+original source, not variations of the same code path:
+
+- **`wcn_fw_path[]` in `BSP/platform/wcn_boot.c`** (the manual
+  `filp_open()`-based fallback loop used once the fast-path
+  `request_firmware()` call below has failed): added
+  `/lib/firmware/unisoc/` as entry 0 (highest priority, tried first),
+  bumping `WCN_FW_MAX_PATH_NUM` from 4 to 5 and
+  `UNISOC_FW_PATH_DEFAULT`'s un-overridden default to match. The four
+  previously-existing paths (`/system/etc/firmware/`,
+  `/vendor/etc/firmware/`, `/lib/firmware/`, `/vendor/firmware/`) are
+  all still tried afterward, so this is additive, not a removal of
+  the old search locations.
+
+- **The initial `request_firmware()` call, same file.** This is a
+  genuinely separate mechanism from `wcn_fw_path[]` -- it uses the
+  kernel's own firmware-loading subsystem, which resolves names
+  against `/lib/firmware/<name>` (plus a few kernel-configured extra
+  paths), independent of anything `wcn_fw_path[]` does. Simply adding
+  `/lib/firmware/unisoc/` to `wcn_fw_path[]` wouldn't make *this*
+  call look there; the subdirectory needs to be baked into the name
+  requested. Added a separate `WCN_FW_REQUEST_NAME` macro
+  (`"unisoc/wcnmodem.bin"`, vs. plain `"wcnmodem.bin"` for
+  `WCN_FW_NAME`, which is still used unprefixed by the
+  `wcn_fw_path[]` loop -- prefixing both would have produced a
+  doubled `unisoc/unisoc/` path there) and pointed the
+  `request_firmware()` call at it. This means the *first* firmware
+  load attempt now succeeds immediately from
+  `/lib/firmware/unisoc/wcnmodem.bin` rather than only succeeding a
+  few fallback-loop iterations later.
+
+- **`dbg_ini_file_path[]` in `WIFI/dbg_ini_util.c`** (`wifi_dbg.ini`):
+  added `/lib/firmware/unisoc/wifi_dbg.ini` as entry 0, same
+  additive treatment, `MAX_PATH_NUM` bumped 3 -> 4.
+
+- **`WIFI_BOARD_CFG_PATH`'s fallback default in `WIFI/rf_marlin3.c`**
+  (the per-chip/antenna-count `wifi_<chipid>_<ant>ant.ini` board
+  config file): this one was already fully configurable at build time
+  via `CUSTOMIZE_WIFI_CFG_PATH` / the Makefile's `UNISOC_WIFI_CUS_CONFIG`
+  variable -- and your CoreELEC build already passes
+  `UNISOC_WIFI_CUS_CONFIG="/lib/firmware/unisoc"`, so this path was
+  already correct in practice before this round. Updated its
+  `#else` (un-overridden) default from `/vendor/etc/` to
+  `/lib/firmware/unisoc/` anyway, purely for consistency in case this
+  is ever built without that Makefile variable set.
+
+I also checked the rest of the driver for other hardcoded path
+defaults and found three more that are **not** firmware or `.ini`
+files, so left untouched: `rdc_debug.c`'s debug/cp2log paths
+(`/data/unisoc_dbg`, `*.txt` config), `wcn_parn_parser.c`'s
+`/etc/fstab` lookup (used to locate the vendor partition mount point,
+unrelated to firmware/config loading), and `main.c`'s
+`WIFI_MAC_ADDR_PATH` (`/data/misc/wifi/wifimac.txt`, a MAC address
+file). Say the word if you'd like any of those pointed at
+`/lib/firmware/unisoc/` too.
+
 ## Recommended next step
 
 Build each `ddk_module` against your actual 5.15, 6.2, and 6.12 trees and

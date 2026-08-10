@@ -207,6 +207,43 @@ found and fixed:
   genuinely `EXPORT_SYMBOL`'d in the BSP module's buildable sources
   (mostly `wcn_boot.c`, one in `wcn_bus.c`).
 
+## Third round: sysfs WARN on real hardware boot (CoreELEC dmesg)
+
+`mtty_probe` triggered a kernel `WARNING` on boot:
+
+```
+------------[ cut here ]------------
+Attribute at: Invalid permissions 0777
+WARNING: CPU: 0 PID: 443 at fs/sysfs/group.c:61 internal_create_group+0x1d0/0x3e4
+...
+Call trace:
+ internal_create_group+0x1d0/0x3e4
+ sysfs_create_group+0x24/0x34
+ mtty_probe+0x210/0x2ec [sprdbt_tty ...]
+```
+
+Root cause, in `tty.c`: five `DEVICE_ATTR()` sysfs attributes
+(`at`, `woble_set`, `ant_num`, `chipid`, `misc_node`) were declared
+with mode `0777` (world read/write/execute), gated behind
+`#define ALL_PER 1` -- a hardcoded, effectively-permanent `1` with a
+`0660`-mode `#else` branch that could never actually be reached. The
+kernel's own `DEVICE_ATTR()` macro has a build-time check,
+`VERIFY_OCTAL_PERMISSIONS()`, specifically designed to *refuse to
+compile* `0777` attributes -- this code went out of its way to defeat
+that check with a local `#pragma push_macro("VERIFY_OCTAL_PERMISSIONS")`
+/ redefine-to-no-op, rather than fix the underlying permission value.
+At runtime, `sysfs_create_group()` independently re-checks and rejects
+it with the `WARN()` seen above. The driver survives it (`mtty_probe`
+completes, boot continues) but it was never a valid or intentional
+permission mode -- it's a bug that happened to go unnoticed until a
+kernel new enough to warn about it loudly.
+
+Fixed by deleting the whole `ALL_PER`/`VERIFY_OCTAL_PERMISSIONS`
+override block and declaring all five attributes at `0660` directly
+(owner+group read/write) -- exactly what the driver's own dead `#else`
+branch already intended, just without the override machinery forcing
+past it.
+
 ## What I could not verify
 
 Same caveat as the `uwe5621ds` tree: none of this has been
