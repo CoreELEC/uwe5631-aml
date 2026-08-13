@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #endif
 #include <wcn_bus.h>
+#include "wcn_kcompat.h"
 #ifdef CONFIG_WCN_SLP
 #include "../sleep/sdio_int.h"
 #include "../sleep/slp_mgr.h"
@@ -29,9 +30,6 @@
 	pr_info("sdiohal:" fmt, ## args)
 #define sdiohal_err(fmt, args...) \
 	pr_err("sdiohal err:" fmt, ## args)
-
-/* we don't need debug to be enabled */
-#undef CONFIG_DEBUG_FS
 
 #ifdef CONFIG_DEBUG_FS
 extern long int sdiohal_log_level;
@@ -56,7 +54,7 @@ extern long int sdiohal_log_level;
 	} while (0)
 #define sdiohal_pr_perf(fmt, args...) \
 	do { if (sdiohal_log_level & SDIOHAL_PERF_LEVEL) \
-		pr_err("sdiohal:" fmt, ## args); \
+		trace_printk("sdiohal:" fmt, ## args); \
 	} while (0)
 #else
 #define sdiohal_normal(fmt, args...)
@@ -384,18 +382,11 @@ struct sdiohal_data_t {
 	unsigned long long rx_packer_cnt;
 	char *dtbs_buf;
 
-	/* for performance statistics */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	/* for performance statics */
 	struct timespec64 tm_begin_sch;
 	struct timespec64 tm_end_sch;
 	struct timespec64 tm_begin_irq;
 	struct timespec64 tm_end_irq;
-#else
-	struct timespec tm_begin_sch;
-	struct timespec tm_end_sch;
-	struct timespec tm_begin_irq;
-	struct timespec tm_end_irq;
-#endif
 
 	/*wakeup_source pointer*/
 	struct wakeup_source *scan_ws;

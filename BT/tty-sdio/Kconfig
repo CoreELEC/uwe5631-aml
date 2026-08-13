@@ -1,4 +1,26 @@
+#
+# Unisoc BT tty-over-SDIO driver
+#
+# This file documents the config symbol for the kernel module produced
+# by this driver tree. The symbol actually consumed by the Bazel/DDK
+# build lives in ddk_kconfig.sprdbt_tty (see BUILD.bazel); this file
+# exists for reference and for non-Bazel (traditional Kconfig tree)
+# integration.
+#
+
 config TTY_OVERY_SDIO
-	tristate "Spard TTY Overy SDIO Driver"
+	depends on UWE5621_BSP_SDIO
+	tristate "Unisoc BT tty-over-SDIO driver (sprdbt_tty)"
 	---help---
-	  Spard tty overy sdio driver.
+	  tty-line-discipline-style Bluetooth HCI transport for the Unisoc
+	  UWE5621DS WiFi+BT combo chip's SDIO-attached BT function.
+	  Exposes a /dev/ttyBT0-style character device that userspace
+	  (hciattach / a Bluetooth HAL) treats as a UART; frames are
+	  actually carried over the shared SDIO bus channel exported by
+	  the UWE5621_BSP_SDIO module.
+
+	  Requires UWE5621_BSP_SDIO for the underlying SDIO bus channel
+	  API (sprdwcn_bus_*) this driver calls into.
+
+	  When compiled as a module, this driver will be called
+	  sprdbt_tty.

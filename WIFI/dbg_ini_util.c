@@ -9,9 +9,10 @@
 #include "sprdwl.h"
 
 #define LOAD_BUF_SIZE 1024
-#define MAX_PATH_NUM  3
+#define MAX_PATH_NUM  4
 
 static char *dbg_ini_file_path[MAX_PATH_NUM] = {
+	"/lib/firmware/unisoc/wifi_dbg.ini",	/* CoreELEC/most Unisoc-packaged builds */
 	"/data/misc/wifi/wifi_dbg.ini",
 	"/vendor/etc/wifi/wifi_dbg.ini",
 	"/etc/wifi_dbg.ini"
@@ -21,7 +22,6 @@ static int dbg_load_ini_resource(char *path[], char *buf, int size)
 {
 	int ret;
 	int index = 0;
-	mm_segment_t oldfs;
 	struct file *filp = (struct file *)-ENOENT;
 
 	for (index = 0; index < MAX_PATH_NUM; index++) {
@@ -34,21 +34,10 @@ static int dbg_load_ini_resource(char *path[], char *buf, int size)
 	if (IS_ERR(filp))
 		return -ENOENT;
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	oldfs = force_uaccess_begin();
-#else
-	oldfs = get_fs();
-	set_fs(KERNEL_DS);
-#endif
-#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 1)
 	ret = kernel_read(filp, buf, size, &filp->f_pos);
 #else
 	ret = kernel_read(filp, filp->f_pos, buf, size);
-#endif
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 10, 0)
-	set_fs(oldfs);
 #endif
 
 	filp_close(filp, NULL);

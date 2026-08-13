@@ -39,7 +39,7 @@
 
 static struct file *gnss_dump_file;
 static	loff_t pos;
-#define GNSS_MEMDUMP_PATH			"/storage/gnssdump.mem"
+#define GNSS_MEMDUMP_PATH			"/data/vendor/gnss/gnssdump.mem"
 
 #ifndef CONFIG_SC2342_INTEG
 struct gnss_mem_dump {
@@ -255,20 +255,10 @@ static int gnss_dump_cp_register_data(u32 addr, u32 len)
 		}
 		memcpy(iram_buffer, buf, len);
 	}
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	fs = force_uaccess_begin();
-#else
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-#endif
-#endif
 	pos = gnss_dump_file->f_pos;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	ret = kernel_write(gnss_dump_file, iram_buffer, len, &pos);
-#else
 	ret = vfs_write(gnss_dump_file, iram_buffer, len, &pos);
-#endif
 	gnss_dump_file->f_pos = pos;
 	kfree(buf);
 	vfree(iram_buffer);
@@ -343,20 +333,10 @@ static int gnss_dump_ap_register(void)
 	}
 	memset(apreg_buffer, 0, len);
 	memcpy(apreg_buffer, ptr, len);
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	fs = force_uaccess_begin();
-#else
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-#endif
-#endif
 	pos = gnss_dump_file->f_pos;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	ret = kernel_write(gnss_dump_file, apreg_buffer, len, &pos);
-#else
 	ret = vfs_write(gnss_dump_file, apreg_buffer, len, &pos);
-#endif
 	gnss_dump_file->f_pos = pos;
 	vfree(apreg_buffer);
 	set_fs(fs);
@@ -415,14 +395,8 @@ static int gnss_dump_share_memory(u32 len)
 	if (len == 0)
 		return -1;
 	GNSSDUMP_INFO("gnss_dump_share_memory\n");
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	fs = force_uaccess_begin();
-#else
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-#endif
-#endif
 	base_addr = wcn_get_gnss_base_addr();
 	virt_addr = shmem_ram_vmap_nocache(base_addr, len);
 	if (!virt_addr) {
@@ -447,11 +421,7 @@ static int gnss_dump_share_memory(u32 len)
 	memset(ddr_buffer, 0, len);
 	memcpy(ddr_buffer, virt_addr, len);
 	pos = gnss_dump_file->f_pos;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	ret = kernel_write(gnss_dump_file, ddr_buffer, len, &pos);
-#else
 	ret = vfs_write(gnss_dump_file, ddr_buffer, len, &pos);
-#endif
 	gnss_dump_file->f_pos = pos;
 	shmem_ram_unmap(virt_addr);
 	set_fs(fs);
@@ -532,14 +502,8 @@ static int gnss_ext_dump_data(unsigned int start_addr, int len)
 			return PTR_ERR(gnss_dump_file);
 		}
 	}
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	fs = force_uaccess_begin();
-#else
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-#endif
-#endif
 	while (count < len) {
 		trans = (len - count) > DUMP_PACKET_SIZE ?
 				 DUMP_PACKET_SIZE : (len - count);
@@ -550,11 +514,7 @@ static int gnss_ext_dump_data(unsigned int start_addr, int len)
 		}
 		count += trans;
 		pos = gnss_dump_file->f_pos;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-		ret = kernel_write(gnss_dump_file, buf, trans, &pos);
-#else
 		ret = vfs_write(gnss_dump_file, buf, trans, &pos);
-#endif
 		gnss_dump_file->f_pos = pos;
 		if (ret != trans) {
 			GNSSDUMP_ERR("%s failed size is %d, ret %d\n", __func__,

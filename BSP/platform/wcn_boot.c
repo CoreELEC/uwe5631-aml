@@ -63,7 +63,6 @@ extern int wifi_irq_trigger_level(void);
 extern void extern_bt_set_enable(int is_on);
 #endif
 extern void extern_wifi_set_enable(int is_on);
-extern void set_usb_wifi_power(int is_power);
 #endif
 
 #ifdef CONFIG_GOKE_BOARD
@@ -116,17 +115,38 @@ struct gpio_config {
 #define RTL_REG_RST_GPIO (17)
 #endif
 
-#define WCN_FW_MAX_PATH_NUM	1
+#define WCN_FW_MAX_PATH_NUM	5
 /* path of cp2 firmware. */
+#ifdef CONFIG_CUSTOMIZE_UNISOC_FW_PATH
+#define UNISOC_FW_PATH_DEFAULT CONFIG_CUSTOMIZE_UNISOC_FW_PATH
+#else
 #define UNISOC_FW_PATH_DEFAULT "/lib/firmware/unisoc/"
+#endif
 static char *wcn_fw_path[WCN_FW_MAX_PATH_NUM] = {
-	UNISOC_FW_PATH_DEFAULT		/* most of projects */
+	UNISOC_FW_PATH_DEFAULT,	/* CoreELEC/most Unisoc-packaged builds */
+	"/system/etc/firmware/",	/* most of projects */
+	"/vendor/etc/firmware/",	/* allwinner h6/h616... */
+	"/lib/firmware/",		/* allwinner r328... */
+	"/vendor/firmware/"
 };
 
 #if defined(CONFIG_WCN_SDIO)
-#define WCN_FW_NAME	"unisoc/wcnmodem.bin"
+#define WCN_FW_NAME	"wcnmodem.bin"
+/*
+ * request_firmware() (the fast path tried first, below) uses the
+ * kernel's own firmware search mechanism, which is independent of
+ * wcn_fw_path[] (that array only backs the manual filp_open()-based
+ * fallback loop). To have this fast path also find the firmware
+ * under /lib/firmware/unisoc/, its name needs the subdirectory
+ * baked in -- request_firmware() resolves "unisoc/wcnmodem.bin"
+ * against /lib/firmware/unisoc/wcnmodem.bin, not against
+ * UNISOC_FW_PATH_DEFAULT (the two mechanisms don't share the same
+ * path list).
+ */
+#define WCN_FW_REQUEST_NAME	"unisoc/wcnmodem.bin"
 #elif defined(CONFIG_WCN_USB)
 #define WCN_FW_NAME	"wcnmodem_usb.bin"
+#define WCN_FW_REQUEST_NAME	"unisoc/wcnmodem_usb.bin"
 #endif
 
 #define GNSS_FW_NAME	"gnssmodem.bin"
@@ -410,7 +430,7 @@ unsigned long marlin_get_power_state(void)
 {
 	return marlin_dev->power_state;
 }
-EXPORT_SYMBOL(marlin_get_power_state);
+EXPORT_SYMBOL_GPL(marlin_get_power_state);
 
 unsigned char marlin_get_bt_wl_wake_host_en(void)
 {
@@ -465,7 +485,7 @@ unsigned int marlin_get_wcn_chipid(void)
 
 	return chip_id;
 }
-EXPORT_SYMBOL(marlin_get_wcn_chipid);
+EXPORT_SYMBOL_GPL(marlin_get_wcn_chipid);
 
 /* return chip model, for example:
  * 0: WCN_CHIP_INVALID
@@ -596,7 +616,7 @@ out:
 	WCN_DEBUG("%s: chip_name: %s\n", __func__, wcn_chip_name);
 	return wcn_chip_name;
 }
-EXPORT_SYMBOL(wcn_get_chip_name);
+EXPORT_SYMBOL_GPL(wcn_get_chip_name);
 
 /*
  * Some platforms not insmod bsp ko dynamically. This function is used for
@@ -629,20 +649,10 @@ static int marlin_find_sdio_device_id(unsigned char *path)
 	}
 	WCN_INFO("%s open %s success cnt=%d\n", __func__,
 		 sdio_id_path, i);
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	fs = force_uaccess_begin();
-#else
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-#endif
-#endif
 	pos = 0;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	kernel_read(filp, read_buf, sizeof(read_buf), &pos);
-#else
 	vfs_read(filp, read_buf, sizeof(read_buf), &pos);
-#endif
 	WCN_INFO("%s read_buf: %s\n", __func__, read_buf);
 	sdio_id_pos = strstr(read_buf, "SDIO_ID=0000:0000");
 	if (!sdio_id_pos) {
@@ -691,7 +701,7 @@ int marlin_get_ant_num(void)
 {
 	return get_board_ant_num();
 }
-EXPORT_SYMBOL(marlin_get_ant_num);
+EXPORT_SYMBOL_GPL(marlin_get_ant_num);
 
 /* get the subsys string */
 const char *strno(int subsys)
@@ -1070,11 +1080,11 @@ static int marlin_request_firmware(struct marlin_firmware **mfirmware_p)
 		 * else download from backup firmware.
 		 */
 		if (marlin_dev->first_power_on_flag == 1) {
-			WCN_INFO("%s request_firmware %s start!\n", __func__, WCN_FW_NAME);
-			ret = request_firmware(&firmware, WCN_FW_NAME, NULL);
+			WCN_INFO("%s request_firmware %s start!\n", __func__, WCN_FW_REQUEST_NAME);
+			ret = request_firmware(&firmware, WCN_FW_REQUEST_NAME, NULL);
 			if (ret < 0) {
 				WCN_ERR("%s not find %s errno:(%d)(ignore!!)\n",
-					__func__, WCN_FW_NAME, ret);
+					__func__, WCN_FW_REQUEST_NAME, ret);
 				marlin_dev->is_btwf_in_sysfs = 1;
 
 				return ret;
@@ -2671,30 +2681,6 @@ static int chip_reset_release(int val)
 
 	return 0;
 }
-
-#ifdef CONFIG_AML_BOARD
-void marlin_wifi_power(bool on)
-{
-	static unsigned int chip_en_count;
-
-	if (on) {
-		if (chip_en_count == 0) {
-			set_usb_wifi_power(0);
-			set_usb_wifi_power(1);
-			WCN_INFO("marlin chip wifi power on\n");
-		}
-		chip_en_count++;
-	} else {
-		chip_en_count--;
-		if (chip_en_count == 0) {
-			set_usb_wifi_power(0);
-			WCN_INFO("marlin chip wifi power off\n");
-		}
-	}
-	return;
-}
-#endif
-
 void marlin_chip_en(bool enable, bool reset)
 {
 	static unsigned int chip_en_count;
@@ -3222,9 +3208,6 @@ int chip_power_on(int subsys)
 	marlin_avdd18_dcxo_enable(true);
 	marlin_clk_enable(true);
 	marlin_digital_power_enable(true);
-#ifdef CONFIG_AML_BOARD
-	marlin_wifi_power(true);
-#endif
 #ifdef CONFIG_GOKE_BOARD
 	if (subsys == 0xff) {
 		gk_gpio_set_value(RTL_REG_RST_GPIO, 0);
@@ -3283,9 +3266,6 @@ int chip_power_off(int subsys)
 	}
 #else
 	marlin_chip_en(false, false);
-#endif
-#ifdef CONFIG_AML_BOARD
-	marlin_wifi_power(false);
 #endif
 	marlin_digital_power_enable(false);
 	marlin_analog_power_enable(false);
@@ -3848,7 +3828,7 @@ int cali_ini_need_download(enum marlin_sub_sys subsys)
 	}
 	return 0;	/* not the first */
 }
-EXPORT_SYMBOL(cali_ini_need_download);
+EXPORT_SYMBOL_GPL(cali_ini_need_download);
 
 int marlin_set_wakeup(enum marlin_sub_sys subsys)
 {
@@ -3973,7 +3953,7 @@ int start_marlin(u32 subsys)
 	return 0;
 #endif
 }
-EXPORT_SYMBOL(start_marlin);
+EXPORT_SYMBOL_GPL(start_marlin);
 
 int stop_marlin(u32 subsys)
 {
@@ -3999,7 +3979,7 @@ int stop_marlin(u32 subsys)
 
 	return marlin_set_power(subsys, false);
 }
-EXPORT_SYMBOL(stop_marlin);
+EXPORT_SYMBOL_GPL(stop_marlin);
 
 static void marlin_power_wq(struct work_struct *work)
 {
@@ -4120,7 +4100,18 @@ static int marlin_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int  marlin_remove(struct platform_device *pdev)
+/*
+ * struct platform_driver::remove() changed from returning int to
+ * returning void in Linux 6.11 (commit 0edb555a65d1,
+ * "platform: make platform_driver::remove() return void"). This
+ * function never returned a non-zero status, so the conversion is a
+ * pure signature/return-type change.
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
+static int marlin_remove(struct platform_device *pdev)
+#else
+static void marlin_remove(struct platform_device *pdev)
+#endif
 {
 #if (defined(CONFIG_BT_WAKE_HOST_EN) && defined(CONFIG_AW_BOARD)) \
 	|| defined(CONFIG_RK_BOARD)
@@ -4152,9 +4143,6 @@ static int  marlin_remove(struct platform_device *pdev)
 		wifipa_enable(0);
 		pmic_bound_xtl_assert(0);
 		marlin_chip_en(false, false);
-#ifdef CONFIG_AML_BOARD
-		marlin_wifi_power(false);
-#endif
 	}
 	wcn_bus_deinit();
 #ifdef CONFIG_WCN_SLP
@@ -4172,7 +4160,9 @@ static int  marlin_remove(struct platform_device *pdev)
 
 	WCN_INFO("marlin_remove ok!\n");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
 	return 0;
+#endif
 }
 
 static void marlin_shutdown(struct platform_device *pdev)
@@ -4189,9 +4179,6 @@ static void marlin_shutdown(struct platform_device *pdev)
 		wifipa_enable(0);
 		pmic_bound_xtl_assert(0);
 		marlin_chip_en(false, false);
-#ifdef CONFIG_AML_BOARD
-		marlin_wifi_power(false);
-#endif
 	}
 
 #if (defined(CONFIG_GOKE_BOARD) && defined(CONFIG_WCN_USB))
@@ -4273,7 +4260,7 @@ int marlin_reset_callback_register(u32 subsys, struct notifier_block *nb)
 {
 	return raw_notifier_chain_register(&marlin_reset_notifiers[subsys], nb);
 }
-EXPORT_SYMBOL(marlin_reset_callback_register);
+EXPORT_SYMBOL_GPL(marlin_reset_callback_register);
 
 void marlin_reset_callback_unregister(u32 subsys, struct notifier_block *nb)
 {
@@ -4282,7 +4269,7 @@ void marlin_reset_callback_unregister(u32 subsys, struct notifier_block *nb)
 	if(ret)
 		WCN_ERR("%s is not registered for reset notification\n", strno(subsys));
 }
-EXPORT_SYMBOL(marlin_reset_callback_unregister);
+EXPORT_SYMBOL_GPL(marlin_reset_callback_unregister);
 
 static int marlin_resume(struct device *dev)
 {
@@ -4397,6 +4384,16 @@ module_exit(marlin_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Spreadtrum  WCN Marlin Driver");
 MODULE_AUTHOR("Yufeng Yang <yufeng.yang@spreadtrum.com>");
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+/*
+ * At least one target kernel (CoreELEC's Amlogic 5.15 tree) gates
+ * filp_open()/kernel_read()/kernel_write() -- all used in this
+ * module (rdc_debug.c, wcn_boot.c and others) -- behind the
+ * "VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver" symbol
+ * namespace and requires an explicit import or modpost fails with
+ * "uses symbol X from namespace ... but does not import it". This is
+ * harmless to declare even on kernels where these symbols aren't
+ * namespaced (e.g. mainline, and the Android common16-6.12 tree this
+ * driver also targets): MODULE_IMPORT_NS() referencing a namespace
+ * that doesn't exist on a given kernel is simply a no-op there.
+ */
 MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
-#endif

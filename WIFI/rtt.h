@@ -427,7 +427,7 @@ struct sprdwl_ftm_session_request {
 	u64 session_cookie;
 	u32 n_peers;
 	/* keep last, variable size according to n_peers */
-	struct sprdwl_ftm_meas_peer_info peers[0];
+	struct sprdwl_ftm_meas_peer_info peers[];
 };
 
 /* single measurement for a peer */
@@ -449,7 +449,7 @@ struct sprdwl_ftm_peer_meas_res {
 	u8 lcr_length;
 	u32 n_meas;
 	/* keep last, variable size according to n_meas */
-	struct sprdwl_ftm_peer_meas meas[0];
+	struct sprdwl_ftm_peer_meas meas[];
 };
 
 /* private data related to FTM. Part of the priv structure */

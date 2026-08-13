@@ -33,7 +33,6 @@ static struct genl_family sprdwl_nl_genl_family;
 static int sprdwl_get_flag(void)
 {
 	struct file *fp = NULL;
-	mm_segment_t fs;
 	loff_t *pos;
 	int flag = 0;
 	char file_data[2];
@@ -44,26 +43,12 @@ static int sprdwl_get_flag(void)
 		wl_err("open file:%s failed\n", SPRDWL_PSM_PATH);
 		return PTR_ERR(fp);
 	}
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	fs = force_uaccess_begin();
-#else
-	fs = get_fs();
-	set_fs(KERNEL_DS);
-#endif
-#endif
 
 	pos = &fp->f_pos;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+	/* kernel_read() takes a kernel buffer directly; no set_fs() needed. */
 	kernel_read(fp, file_data, 1, pos);
-#else
-	vfs_read(fp, file_data, 1, pos);
-#endif
 
 	filp_close(fp, NULL);
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 10, 0)
-	set_fs(fs);
-#endif
 
 	file_data[1] = 0;
 	if (kstrtoull(file_data, 10, &tmp)) {
@@ -110,7 +95,22 @@ static int sprdwl_cmd_set_psm_cap(struct sprdwl_vif *vif)
 	return ret;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+/*
+ * genl_family.pre_doit/post_doit switched from taking
+ * `const struct genl_ops *` to `const struct genl_split_ops *` as part
+ * of genetlink's "split ops" rework. Neither callback here actually
+ * dereferences `ops`, so this is a pure type-signature fix.
+ *
+ * NOTE: the exact kernel version this landed in for nl80211/genetlink
+ * is less firmly established than the other fixes in this tree (see
+ * PORTING_NOTES.md) -- KERNEL_VERSION(6, 3, 0) is a best estimate. If
+ * a 6.2 build still reports a mismatch here, move this threshold up
+ * to 6.2's actual value (or down, if 6.2 already needs the new type).
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+static int sprdwl_npi_pre_doit(const struct genl_split_ops *ops,
+			       struct sk_buff *skb, struct genl_info *info)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 static int sprdwl_npi_pre_doit(const struct genl_ops *ops,
 			       struct sk_buff *skb, struct genl_info *info)
 #else
@@ -146,7 +146,10 @@ static int sprdwl_npi_pre_doit(struct genl_ops *ops,
 	return 0;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+static void sprdwl_npi_post_doit(const struct genl_split_ops *ops,
+				 struct sk_buff *skb, struct genl_info *info)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 static void sprdwl_npi_post_doit(const struct genl_ops *ops,
 				 struct sk_buff *skb, struct genl_info *info)
 #else

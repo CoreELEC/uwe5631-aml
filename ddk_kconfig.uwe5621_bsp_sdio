@@ -1,0 +1,3 @@
+config UWE5621_BSP_SDIO
+	tristate "Unisoc UWE5621 WiFi+BT combo BSP driver (SDIO)"
+	default m

@@ -1,0 +1,202 @@
+load("//build/kernel/kleaf:kernel.bzl", "ddk_headers", "ddk_module")
+load("//common_drivers:amlogic_utils.bzl", "kernel_select")
+
+# NOTE: Adjust the load() path above and the //common_drivers/... deps
+# below to match your kernel workspace layout. These were derived from
+# the provided rtl8733bs BUILD-example.bazel, which targets an Amlogic
+# (amlogic-mmc / amlogic-wireless) kernel_build. This driver's own
+# Makefile also builds against CFG_AML_WIFI_DEVICE_UWE5621, so the same
+# kernel_build target ("//common_drivers:amlogic") is reused here.
+#
+# This tree produces TWO kernel modules, mirroring the two independent
+# kbuild Makefiles (BSP/Makefile, WIFI/Makefile) it replaces:
+#
+#   - uwe5621_bsp_sdio.ko : SDIO bus / firmware boot / sleep management
+#                           (was BSP/Makefile, MODULE_NAME=uwe5621_bsp_sdio
+#                           for CFG_AML_WIFI_DEVICE_UWE5621=y)
+#   - sprdwl_ng.ko        : cfg80211 WiFi driver (was WIFI/Makefile)
+#
+# sprdwl_ng.ko calls into symbols EXPORT_SYMBOL'd by uwe5621_bsp_sdio.ko
+# (e.g. sprdwcn_bus_* / bus_chn_init / module_ops_register), so the wifi
+# ddk_module depends on the bsp ddk_module below.
+#
+# Only the source files actually selected by the original Makefiles for
+# the SDIO/Amlogic build (CFG_AML_WIFI_DEVICE_UWE5621=y, no GNSS/USB/PCIe)
+# are listed. BSP/boot, BSP/usb, BSP/pcie, BSP/sipc, BSP/tool, BSP/vm and
+# BSP/platform/gnss are not part of that build and are intentionally
+# excluded; if you need those transports, add their sources/headers back
+# and re-derive local_defines the same way (see comment above each
+# ddk_module's srcs).
+
+ddk_headers(
+    name = "uwe5621_bsp_headers",
+    hdrs = glob([
+        "BSP/include/**/*.h",
+        "BSP/platform/*.h",
+        "BSP/platform/rf/*.h",
+        "BSP/sdio/*.h",
+        "BSP/sleep/*.h",
+        "BSP/usb/*.h",
+        "BSP/*.h",
+    ]),
+    linux_includes = [
+        "BSP/include",
+        "BSP/platform",
+        "BSP/platform/rf",
+        "BSP/sdio",
+        "BSP/sleep",
+        "BSP/usb",
+        "BSP",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+ddk_headers(
+    name = "sprdwl_ng_headers",
+    hdrs = glob(["WIFI/*.h"]),
+    linux_includes = [
+        "WIFI",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Corresponds to BSP/Makefile's $(MODULE_NAME)-y list when
+# CFG_AML_WIFI_DEVICE_UWE5621=y (MODULE_NAME=uwe5621_bsp_sdio,
+# CONFIG_WCN_SDIO=y, CONFIG_WCN_SWD=y, no GNSS/USB/PCIe/bind-verify).
+# If you flip any CFG_*/CONFIG_* value in BSP/Makefile, re-derive this
+# srcs list and the local_defines below from it.
+ddk_module(
+    name = "uwe5621_bsp_sdio",
+    srcs = [
+        "BSP/wcn_bus.c",
+        "BSP/platform/wcn_boot.c",
+        "BSP/platform/wcn_dump.c",
+        "BSP/platform/bufring.c",
+        "BSP/platform/wcn_txrx.c",
+        "BSP/platform/wcn_op.c",
+        "BSP/platform/wcn_parn_parser.c",
+        "BSP/platform/rdc_debug.c",
+        "BSP/platform/wcn_log.c",
+        "BSP/platform/wcn_misc.c",
+        "BSP/platform/wcn_procfs.c",
+        "BSP/platform/loopcheck.c",
+        "BSP/platform/wcn_swd_dp.c",
+        "BSP/platform/mem_pd_mgr.c",
+        "BSP/sdio/sdiohal_main.c",
+        "BSP/sdio/sdiohal_common.c",
+        "BSP/sdio/sdiohal_tx.c",
+        "BSP/sdio/sdiohal_rx.c",
+        "BSP/sdio/sdio_v3.c",
+        "BSP/sdio/sdiohal_ctl.c",
+        "BSP/sleep/sdio_int.c",
+        "BSP/sleep/slp_mgr.c",
+        "BSP/sleep/slp_sdio.c",
+        "BSP/sleep/slp_test.c",
+    ],
+    hdrs = [
+        ":uwe5621_bsp_headers",
+        "//common_drivers:soc_headers",
+    ],
+    local_defines = [
+        "__linux__",
+        "CONFIG_WCN_SDIO",
+        "CONFIG_WCN_SLP",
+        "CONFIG_WCN_SWD",
+        "CONFIG_CHECK_DRIVER_BY_CHIPID",
+        "CONFIG_WCN_BOOT",
+        "CONFIG_WCN_UTILS",
+        "CONFIG_CP2_ASSERT",
+        "CONFIG_AML_BOARD",
+        "CONFIG_WCN_RESET_PIN_CONNECTED",
+        "CONFIG_WCN_POWER_UP_DOWN",
+        "CONFIG_BT_WAKE_HOST_EN",
+        "CONFIG_CUSTOMIZE_SDIO_IRQ_TYPE=3",
+        "CONFIG_SDIO_BLKSIZE_512",
+    ],
+    copts = [
+        "-fno-pic",
+        "-Wno-date-time",
+        "-Wno-implicit-fallthrough",
+    ],
+    out = "uwe5621_bsp_sdio.ko",
+    kconfig = "ddk_kconfig.uwe5621_bsp_sdio",
+    kernel_build = "//common_drivers:amlogic",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common_drivers/drivers/mmc/host:amlogic-mmc",
+    ],
+)
+
+# Corresponds to WIFI/Makefile's $(MODULE_NAME)-objs list with the
+# default MODULE_NAME=sprdwl_ng and UWE5621_FTR feature set (this is a
+# UWE5621DS tree, so the UWE5621_FTR-guarded files are always part of
+# the build). If you change UNISOC_MODULE_NAME or any of the WIFI/Makefile
+# ccflags-y feature defines, re-derive local_defines below from it.
+ddk_module(
+    name = "sprdwl_ng",
+    srcs = [
+        "WIFI/main.c",
+        "WIFI/cfg80211.c",
+        "WIFI/txrx.c",
+        "WIFI/cmdevt.c",
+        "WIFI/npi.c",
+        "WIFI/msg.c",
+        "WIFI/work.c",
+        "WIFI/vendor.c",
+        "WIFI/tcp_ack.c",
+        "WIFI/mm.c",
+        "WIFI/reorder.c",
+        "WIFI/wl_core.c",
+        "WIFI/tx_msg.c",
+        "WIFI/rx_msg.c",
+        "WIFI/wl_intf.c",
+        "WIFI/qos.c",
+        "WIFI/dbg_ini_util.c",
+        "WIFI/reg_domain.c",
+        "WIFI/defrag.c",
+        "WIFI/ibss.c",
+        "WIFI/nan.c",
+        "WIFI/tracer.c",
+        "WIFI/rf_marlin3.c",
+        "WIFI/rtt.c",
+        "WIFI/api_version.c",
+        "WIFI/rnd_mac_addr.c",
+        "WIFI/debug.c",
+    ],
+    hdrs = [
+        ":sprdwl_ng_headers",
+        ":uwe5621_bsp_headers",
+        "//common_drivers:soc_headers",
+    ],
+    local_defines = [
+        "UWE5621_FTR",
+        "IBSS_SUPPORT",
+        "IBSS_RSN_SUPPORT",
+        "NAN_SUPPORT",
+        "RTT_SUPPORT",
+        "ACS_SUPPORT",
+        "RX_HW_CSUM",
+        "WMMAC_WFA_CERTIFICATION",
+        "COMPAT_SAMPILE_CODE",
+        "RND_MAC_SUPPORT",
+        "ATCMD_ASSERT",
+        "TCPACK_DELAY_SUPPORT",
+        "RX_NAPI",
+        "SPRD_RX_THREAD",
+        "OTT_UWE",
+        "CP2_RESET_SUPPORT",
+        "PPPOE_LLC_SUPPORT",
+        "WOW_SUPPORT",
+    ],
+    copts = [
+        "-Wno-date-time",
+        "-Wno-implicit-fallthrough",
+    ],
+    out = "sprdwl_ng.ko",
+    kconfig = "ddk_kconfig.sprdwl_ng",
+    kernel_build = "//common_drivers:amlogic",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":uwe5621_bsp_sdio",
+    ],
+)

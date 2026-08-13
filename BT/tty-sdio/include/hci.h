@@ -54,9 +54,7 @@
 
 #define BT_HCI_OP_SET_SLEEPMODE     0xfd09
 #define BT_HCI_OP_ADD_WAKEUPLIST    0xfd0a
-#define BT_HCI_OP_CLEANUP_WAKEUPLIST    0xfd0b
 #define BT_HCI_OP_SET_STARTSLEEP    0xfd0d
-
 #define BT_HCI_OP_LE_SET_EX_SCAN_PARAMETERS     0x2041
 #define BT_HCI_OP_LE_SET_EX_SCAN_ENABLE         0x2042
 
@@ -113,23 +111,6 @@ typedef struct {
     unsigned char notify;
 } woble_config_t;
 
-typedef enum {
-    ADV_PUBLIC_ADDRESS = 0,
-    ADV_RANDOM_ADDRESS,
-    ADV_ADDRESS_FROM_WHITTLIST = 0XFF,
-} ADV_ADDRESS_TYPE;
-
-#define ANY_ADV                     ( 1 )
-#define ANY_DATA_ON_LINK            ( 1 << 1 )
-#define ADV_IN_FILTER               ( 1 << 2 )
-#define DATA_IN_FILTER_ON_LINK      ( 1 << 3 )
-#define SUB_ADV_DATA_FILTER         ( 1 << 4 )
-
-typedef enum {
-    KEEP_THE_LINK = 0,
-    DISCONNECT_WITH_DEVICE,
-} ADV_STATE;
-
 typedef struct mtty_bt_wake_t {
     unsigned char addr[6];
     char *addr_str;
@@ -140,7 +121,7 @@ typedef struct mtty_bt_wake_t {
 } mtty_bt_wake_t;
 
 int hci_init(void);
-int hci_destory(void);
+int hci_destroy(void);
 void hci_cleanup(void);
 void hci_woble_enable(void);
 int rx_data_recv(const unsigned char *buf, int count, int (*upper_cb)(const unsigned char *buf, int count));
@@ -152,7 +133,6 @@ void dump_woble_devices(void);
 int hci_cmd_send_sync(unsigned short opcode, struct HC_BT_HDR *py, struct HC_BT_HDR *rsp);
 
 void hci_set_ap_sleep_mode(int is_shutdown, int is_resume);
-void hci_cleanup_wakeup_list(void);
 void hci_add_device_to_wakeup_list(void);
 void hci_set_ap_start_sleep(void);
 void hci_set_scan_parameters(void);

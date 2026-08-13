@@ -1,0 +1,33 @@
+#
+# Unisoc UWE5621DS WiFi+BT combo (SDIO) driver
+#
+# This file documents the two kernel modules produced by this driver tree
+# and their config symbols. The actual symbols consumed by the Bazel/DDK
+# build live in ddk_kconfig.uwe5621_bsp_sdio and ddk_kconfig.sprdwl_ng
+# (one fragment per ddk_module, see BUILD.bazel); this file exists for
+# reference and for non-Bazel (traditional Kconfig tree) integration.
+#
+
+config UWE5621_BSP_SDIO
+	depends on MMC
+	tristate "Unisoc UWE5621 WiFi+BT combo BSP driver (SDIO)"
+	---help---
+	  Bus/boot/sleep management driver for the Unisoc UWE5621DS
+	  WiFi+BT combo chip over SDIO. This module owns the SDIO
+	  transport, firmware download, and low power/sleep handling
+	  shared by the WiFi and BT function drivers.
+
+	  When compiled as a module, this driver will be called
+	  uwe5621_bsp_sdio.
+
+config SPRDWL_NG
+	depends on CFG80211
+	depends on UWE5621_BSP_SDIO
+	tristate "Unisoc UWE5621 Wi-Fi driver (SPRDWL_NG)"
+	---help---
+	  cfg80211-based WiFi driver for the Unisoc UWE5621DS WiFi+BT
+	  combo chip. Requires UWE5621_BSP_SDIO for the underlying SDIO
+	  bus/boot transport.
+
+	  When compiled as a module, this driver will be called
+	  sprdwl_ng.

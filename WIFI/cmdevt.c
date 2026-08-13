@@ -1072,7 +1072,7 @@ int sprdwl_set_regdom(struct sprdwl_priv *priv, u8 *regdom, u32 len)
 }
 
 int sprdwl_open_fw(struct sprdwl_priv *priv, u8 *vif_ctx_id,
-		   u8 mode, u8 *mac_addr)
+		   u8 mode, const u8 *mac_addr)
 {
 	struct sprdwl_msg_buf *msg;
 	struct sprdwl_cmd_open *p;
@@ -1375,7 +1375,7 @@ int sprdwl_scan(struct sprdwl_priv *priv, u8 vif_ctx_id,
 
 	struct sprdwl_5g_chn {
 		u16 n_5g_chn;
-		u16 chns[0];
+		u16 chns[];
 	} *ext_5g;
 
 	chns_len_5g = chn_count_5g * sizeof(*chns_5g);
@@ -3428,10 +3428,39 @@ void sprdwl_event_chan_changed(struct sprdwl_vif *vif, u8 *data, u16 len)
 			/* we will be active on the channel */
 			cfg80211_chandef_create(&chandef, ch,
 						NL80211_CHAN_HT20);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
-			cfg80211_ch_switch_notify(vif->ndev, &chandef);
-#else
+			/*
+			 * cfg80211_ch_switch_notify() gained a third
+			 * `unsigned int link_id` argument as part of the
+			 * MLO link-API rework merged for Linux 6.1
+			 * (upstream commit 7b0a0e3c3a88); 0 = the only
+			 * (non-MLO) link. This 3-arg form is confirmed
+			 * correct on the Android common16-6.12 tree this
+			 * driver also targets (built clean there).
+			 *
+			 * At least one other vendor tree (CoreELEC's
+			 * Amlogic 5.15 kernel) expects a *4th* argument
+			 * beyond that -- confirmed via a real build error
+			 * ("too few arguments... expected 4, have 2") that
+			 * mainline's own signature doesn't require even at
+			 * 6.12, so this is a vendor-specific addition, most
+			 * likely a puncturing-bitmap parameter (mainline's
+			 * sibling function, cfg80211_ch_switch_started_notify,
+			 * has one; some vendor trees have been seen adding
+			 * the same to the plain notify function). Passing
+			 * literal 0 for it is correct regardless of its
+			 * exact type. WCN_CFG80211_CH_SWITCH_NOTIFY_HAS_PUNCT_BITMAP
+			 * is the escape hatch for that, defaulted on in
+			 * WIFI/Makefile for the same reason
+			 * WCN_CFG80211_HAS_MLO_LINK_ID is (kbuild-only
+			 * builds like CoreELEC's; never read by the
+			 * Android/Bazel target).
+			 */
+#if defined(WCN_CFG80211_CH_SWITCH_NOTIFY_HAS_PUNCT_BITMAP)
 			cfg80211_ch_switch_notify(vif->ndev, &chandef, 0, 0);
+#elif defined(WCN_HAVE_CFG80211_MLO_LINK_ID)
+			cfg80211_ch_switch_notify(vif->ndev, &chandef, 0);
+#else
+			cfg80211_ch_switch_notify(vif->ndev, &chandef);
 #endif
 		} else
 			wl_err("%s, ch is null!\n", __func__);
@@ -3692,7 +3721,7 @@ int sprdwl_set_wowlan(struct sprdwl_priv *priv, int subcmd, void *pad, int pad_l
 	struct wowlan_cmd {
 		u8 sub_cmd_id;
 		u8 pad_len;
-		char pad[0];
+		char pad[];
 	} *cmd;
 
 	if (priv == NULL)

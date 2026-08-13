@@ -27,6 +27,7 @@
 #include <linux/sched/clock.h>
 #endif
 #include <wcn_bus.h>
+#include "wcn_kcompat.h"
 #ifdef CONFIG_WCN_PCIE
 #include "pcie.h"
 #endif
@@ -128,7 +129,7 @@ void mdbg_assert_interface(char *str)
 #endif /*CONFIG_CP2_ASSERT*/
 
 }
-EXPORT_SYMBOL(mdbg_assert_interface);
+EXPORT_SYMBOL_GPL(mdbg_assert_interface);
 
 #ifdef CONFIG_WCN_SDIO
 /* this function get data length from buf head */
@@ -197,6 +198,13 @@ static int mdbg_assert_read(int channel, struct mbuf_t *head,
 
 	return 0;
 }
+/*
+ * These callbacks are `static` and only ever referenced within this
+ * file (as .pop_link entries in mdbg_proc_ops[] below); a static
+ * function cannot legally be EXPORT_SYMBOL'd (modpost: "local symbol
+ * ... was exported"), so the exports below were always dead/broken
+ * and have been dropped rather than made non-static.
+ */
 
 static int mdbg_loopcheck_read(int channel, struct mbuf_t *head,
 			struct mbuf_t *tail, int num)
@@ -456,7 +464,7 @@ static const struct file_operations mdbg_snap_shoot_seq_fops = {
 static int mdbg_proc_open(struct inode *inode, struct file *filp)
 {
 	struct mdbg_proc_entry *entry =
-		(struct mdbg_proc_entry *)PDE_DATA(inode);
+		(struct mdbg_proc_entry *)wcn_pde_data(inode);
 	filp->private_data = entry;
 
 	return 0;

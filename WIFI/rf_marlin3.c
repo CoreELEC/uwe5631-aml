@@ -22,7 +22,7 @@
 #ifdef CUSTOMIZE_WIFI_CFG_PATH
 #define WIFI_BOARD_CFG_PATH CUSTOMIZE_WIFI_CFG_PATH
 #else
-#define WIFI_BOARD_CFG_PATH "/vendor/etc/"
+#define WIFI_BOARD_CFG_PATH "/lib/firmware/unisoc/"
 #endif
 
 #define CF_TAB(NAME, MEM_OFFSET, TYPE) \

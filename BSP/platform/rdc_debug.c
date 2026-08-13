@@ -1,11 +1,11 @@
 #include <linux/file.h>
 #include <linux/fs.h>
-#include <linux/namei.h>
 #include <linux/kthread.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
 #include <marlin_platform.h>
 
+#include "wcn_kcompat.h"
 #include "mdbg_type.h"
 #include "rdc_debug.h"
 #include "wcn_txrx.h"
@@ -26,7 +26,11 @@
 #define UNISOC_DBG_FILENUM_DEFAULT 2
 #endif
 /* path of cp2 log and mem files. */
-#define UNISOC_DBG_PATH_DEFAULT "/storage/unisoc_dbg"
+#ifdef CONFIG_CUSTOMIZE_UNISOC_DBG_PATH
+#define UNISOC_DBG_PATH_DEFAULT CONFIG_CUSTOMIZE_UNISOC_DBG_PATH
+#else
+#define UNISOC_DBG_PATH_DEFAULT "/data/unisoc_dbg"
+#endif
 
 /* size of cp2 log files, default is 20M. */
 static unsigned int wcn_cp2_log_limit_size =
@@ -38,14 +42,17 @@ static unsigned int wcn_cp2_file_max_num = UNISOC_DBG_FILENUM_DEFAULT;
  */
 static unsigned int wcn_cp2_log_cover_old = 1;
 /* path of config file unisoc_cp2log_config.txt */
-#define WCN_DEBUG_CFG_MAX_PATH_NUM	1
+#define WCN_DEBUG_CFG_MAX_PATH_NUM	2
 static char *wcn_cp2_config_path[WCN_DEBUG_CFG_MAX_PATH_NUM] = {
-	"/storage/unisoc_cp2log_config.txt"
+	"/data/unisoc_cp2log_config.txt",
+	"/vendor/etc/wifi/unisoc_cp2log_config.txt"
 };
 /* path of cp2 log and mem files. */
-#define WCN_UNISOC_DBG_MAX_PATH_NUM	1
+#define WCN_UNISOC_DBG_MAX_PATH_NUM	3
 static char *wcn_unisoc_dbg_path[WCN_UNISOC_DBG_MAX_PATH_NUM] = {
-	UNISOC_DBG_PATH_DEFAULT /* most of projects */
+	UNISOC_DBG_PATH_DEFAULT,/* most of projects */
+	"/data",		/* amlogic s905w... */
+	"/mnt/UDISK"		/* allwinner r328... */
 };
 
 #define WCN_CP2_LOG_NAME       "/unisoc_cp2log_%%d.txt"
@@ -88,13 +95,7 @@ static int wcn_mkdir(char *path)
 static int wcn_find_cp2_file_num(char *path, loff_t *pos)
 {
 	int i;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct path config_path;
-#endif
 	struct kstat config_stat;
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-	mm_segment_t fs_old;
-#endif
 	int ret = 0;
 	/*first file whose size less than wcn_cp2_log_limit_size*/
 	int first_small_file = 0;
@@ -105,26 +106,10 @@ static int wcn_find_cp2_file_num(char *path, loff_t *pos)
 	int num = 0;
 	int exist_file_num = 0;
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	fs_old = force_uaccess_begin();
-#else
-	fs_old = get_fs();
-	set_fs(KERNEL_DS);
-#endif
-#endif
-
 	if (wcn_cp2_log_cover_old) {
 		for (i = 0; i < wcn_cp2_file_max_num; i++) {
 			sprintf(wcn_cp2_file_path, path, i);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-			ret = kern_path(wcn_cp2_file_path, 0, &config_path);
-			if (!ret) {
-				ret = vfs_getattr(&config_path, &config_stat, STATX_SIZE, 0);
-			}
-#else
-			ret = vfs_stat(wcn_cp2_file_path, &config_stat);
-#endif
+			ret = wcn_vfs_stat(wcn_cp2_file_path, &config_stat);
 			if (ret)
 				break;
 			exist_file_num++;
@@ -184,13 +169,6 @@ static int wcn_find_cp2_file_num(char *path, loff_t *pos)
 		} else
 			filp_close(fp, NULL);
 	}
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	force_uaccess_end(fs_old);
-#else
-	set_fs(fs_old);
-#endif
-#endif
 	return num;
 }
 
@@ -456,15 +434,9 @@ static void wcn_config_log_file(void)
 {
 	struct file *filp;
 	loff_t offset = 0;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct path config_path;
-#endif
 	struct kstat config_stat;
 	int config_size = 0;
 	int read_len = 0;
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-	mm_segment_t fs_old;
-#endif
 	int ret;
 	char *buf;
 	char *buf_end;
@@ -477,23 +449,8 @@ static void wcn_config_log_file(void)
 	int config_max_num = 0;
 	int index = 0;
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	fs_old = force_uaccess_begin();
-#else
-	fs_old = get_fs();
-	set_fs(KERNEL_DS);
-#endif
-#endif
 	for (index = 0; index < WCN_DEBUG_CFG_MAX_PATH_NUM; index++) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-		ret = kern_path(wcn_cp2_config_path[index], 0, &config_path);
-		if (!ret) {
-			ret = vfs_getattr(&config_path, &config_stat, STATX_SIZE, 0);
-		}
-#else
-		ret = vfs_stat(wcn_cp2_config_path[index], &config_stat);
-#endif
+		ret = wcn_vfs_stat(wcn_cp2_config_path[index], &config_stat);
 		if (!ret) {
 			config_size = (int)config_stat.size;
 			WCN_INFO("%s: find config file:%s size:%d\n",
@@ -502,13 +459,6 @@ static void wcn_config_log_file(void)
 			break;
 		}
 	}
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	force_uaccess_end(fs_old);
-#else
-	set_fs(fs_old);
-#endif
-#endif
 	if (index == WCN_DEBUG_CFG_MAX_PATH_NUM) {
 		WCN_INFO("%s: there is no unisoc_cp2log_config.txt\n",
 			 __func__);

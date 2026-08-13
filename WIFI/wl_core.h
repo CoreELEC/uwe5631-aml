@@ -76,11 +76,7 @@ struct sprdwl_peer_entry {
 	unsigned long ba_tx_done_map;
 	u8 vowifi_enabled;
 	u8 vowifi_pkt_cnt;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 	struct timespec64 time[6 + 1];
-#else
-	struct timespec time[6 + 1];
-#endif
 };
 
 #if defined(MORE_DEBUG)

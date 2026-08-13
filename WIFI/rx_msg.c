@@ -29,13 +29,7 @@
 #include <linux/kthread.h>
 
 #include <linux/version.h>
-
-#if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
 #include <uapi/linux/sched/types.h>
-#else
-#include <linux/sched.h>
-#endif
-
 #ifdef RX_HW_CSUM
 bool mh_ipv6_ext_hdr(unsigned char nexthdr)
 {
@@ -433,6 +427,71 @@ static void sprdwl_rx_work_queue(struct work_struct *work)
  */
 int sprdwl_pkt_log_save(struct sprdwl_intf *intf, void *data)
 {
+	int i, j, temp, data_len, pkt_line_num,
+		temp_pkt_line_num, pkt_len, m = 0;
+	/*for pkt log space key and enter key*/
+	char temp_space, temp_enter;
+	/*for pkt log txt line number and write pkt log into file*/
+	char temphdr[6], tempdata[3];
+
+	intf->pfile = filp_open(
+					"storage/sdcard0/Download/sprdwl_pkt_log.txt",
+					O_CREAT | O_RDWR, 0);
+	if (IS_ERR(intf->pfile)) {
+		wl_err("file create/open fail %s, %d\n", __func__, __LINE__);
+		return 1;
+	}
+	/*
+	 * kernel_write() takes a kernel buffer directly; the
+	 * get_fs()/set_fs(KERNEL_DS) override this used to need was
+	 * removed along with set_fs() in Linux 5.10.
+	 */
+	pkt_len = ((struct sprdwl_pktlog_hdr *)(data))->plen;
+	data += sizeof(struct sprdwl_pktlog_hdr);
+	while (m < pkt_len) {
+		data_len = *((unsigned char *)(data + 2)) + 4;
+		m += data_len;
+		temp_space = ' ';
+		temp_enter = '\n';
+		temp_pkt_line_num = 0;
+		pkt_line_num = 0;
+		for (j = 0; j < 6; j++) {
+		     temphdr[j] = '0';
+		}
+		kernel_write(intf->pfile, temphdr, 6, &intf->lp);
+		kernel_write(intf->pfile, &temp_space, 1, &intf->lp);
+		memset(tempdata, 0x00, 3);
+		for (i = 0; i < data_len; i++) {
+				sprintf(tempdata, "%02x",
+						*(unsigned char *)data);
+				kernel_write(intf->pfile, tempdata,
+						  2, &intf->lp);
+				memset(tempdata, 0x00, 3);
+				if ((i != 0) && ((i + 1)%16 == 0)) {
+					if (i < (data_len - 1)) {
+						kernel_write(intf->pfile, &temp_enter,
+								  sizeof(temp_enter), &intf->lp);
+						pkt_line_num += 16;
+						temp_pkt_line_num = pkt_line_num;
+						for (j = 0; j < 6; j++) {
+							temp = (temp_pkt_line_num >> (j*4)) & 0xf;
+							temphdr[5 - j] = (temp < 10) ? (temp + '0') : (temp - 10 + 'a');
+						}
+						kernel_write(intf->pfile, temphdr,
+								  6, &intf->lp);
+						kernel_write(intf->pfile, &temp_space,
+								  1, &intf->lp);
+					}
+				} else {
+					kernel_write(intf->pfile, &temp_space,
+							  sizeof(temp_space), &intf->lp);
+				}
+				data++;
+		}
+		kernel_write(intf->pfile, &temp_enter, sizeof(temp_enter), &intf->lp);
+		memset(temphdr, 0x00, 6);
+	}
+	filp_close(intf->pfile, NULL);
 	return 0;
 }
 
@@ -468,7 +527,15 @@ void sprdwl_rx_napi_init(struct net_device *ndev, struct sprdwl_intf *intf)
 {
 	struct sprdwl_rx_if *rx_if = (struct sprdwl_rx_if *)intf->sprdwl_rx;
 
+	/* netif_napi_add() dropped its 'weight' argument in Linux 6.1
+	 * (commit b48b89f9c189); netif_napi_add_weight() is the
+	 * equivalent call for drivers that need a non-default weight.
+	 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
 	netif_napi_add(ndev, &rx_if->napi_rx, sprdwl_netdev_poll_rx, 128);
+#else
+	netif_napi_add_weight(ndev, &rx_if->napi_rx, sprdwl_netdev_poll_rx, 128);
+#endif
 	napi_enable(&rx_if->napi_rx);
 	rx_if->napi_rx_enable = true;
 }

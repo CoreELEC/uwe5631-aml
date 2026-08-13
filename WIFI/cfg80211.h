@@ -46,7 +46,13 @@
 #endif
 #define WLAN_AKM_SUITE_WAPI_CERT	0x00147201
 #define WLAN_AKM_SUITE_WAPI_PSK		0x00147202
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
+/*
+ * linux/ieee80211.h grew its own WLAN_AKM_SUITE_OWE definition (as
+ * SUITE(0x000FAC, 18), same numeric value) at some point after this
+ * driver was written; guard against the redefinition rather than
+ * assume it's still missing.
+ */
+#ifndef WLAN_AKM_SUITE_OWE
 #define WLAN_AKM_SUITE_OWE		0x000FAC12
 #endif
 
@@ -79,8 +85,6 @@
 #define CH_MAX_5G_CHANNEL			(25)
 #define TOTAL_2G_5G_CHANNEL_NUM			(39)/*14+25=39*/
 #define TOTAL_2G_5G_SSID_NUM         9
-
-#define MGMT_REG_MASK_BIT 32
 
 enum sprdwl_mode {
 	SPRDWL_MODE_NONE,
@@ -123,7 +127,7 @@ enum acl_mode {
 
 struct sprdwl_scan_ssid {
 	u8 len;
-	u8 ssid[0];
+	u8 ssid[];
 } __packed;
 
 struct sprdwl_sched_scan_buf {

@@ -26,17 +26,6 @@ struct mtty_init_data
     char *name;
 };
 
-struct mtty_device
-{
-    struct mtty_init_data *pdata;
-    struct tty_port *port;
-    struct tty_struct *tty;
-    struct tty_driver *driver;
-
-    /* mtty state */
-    atomic_t state;
-};
-
 #define MTTY_DEV_MAX_NR     1
 
 extern int marlin_get_wcn_module_vendor(void);

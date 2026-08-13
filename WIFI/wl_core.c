@@ -807,7 +807,17 @@ err:
 	return ret;
 }
 
+/*
+ * struct platform_driver::remove() changed from returning int to
+ * returning void in Linux 6.11 (commit 0edb555a65d1). This function
+ * never returned a non-zero status, so the conversion is a pure
+ * signature/return-type change.
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
 static int sprdwl_remove(struct platform_device *pdev)
+#else
+static void sprdwl_remove(struct platform_device *pdev)
+#endif
 {
 	struct sprdwl_intf *intf = platform_get_drvdata(pdev);
 	struct sprdwl_priv *priv = intf->priv;
@@ -831,7 +841,9 @@ static int sprdwl_remove(struct platform_device *pdev)
 	stop_marlin(MARLIN_WIFI);
 	wl_info("%s\n", __func__);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
 	return 0;
+#endif
 }
 
 static const struct of_device_id sprdwl_of_match[] = {
@@ -881,6 +893,24 @@ module_platform_driver(sprdwl_driver);
 MODULE_DESCRIPTION("Spreadtrum Wireless LAN Driver");
 MODULE_AUTHOR("Spreadtrum WCN Division");
 MODULE_LICENSE("GPL");
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+/*
+ * sprdwl_ng calls into symbols EXPORT_SYMBOL'd by uwe5621_bsp_sdio
+ * (sprdwcn_bus_*, bus_chn_init, module_ops_register, ...). The
+ * BUILD.bazel `deps = [":uwe5621_bsp_sdio"]` wiring already makes
+ * depmod/modprobe order these correctly via Module.symvers; this
+ * softdep is a belt-and-suspenders declaration for insmod-based or
+ * other loading paths that don't consult depmod's dependency graph.
+ */
+MODULE_SOFTDEP("pre: uwe5621_bsp_sdio");
+/*
+ * At least one target kernel (CoreELEC's Amlogic 5.15 tree) gates
+ * filp_open()/kernel_read()/kernel_write() -- used in dbg_ini_util.c,
+ * main.c, npi.c, rf_marlin3.c, and rx_msg.c -- behind the
+ * "VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver" symbol
+ * namespace; without this, modpost fails with "uses symbol X from
+ * namespace ... but does not import it" (see the same fix in the
+ * uwe5621_bsp_sdio module, BSP/platform/wcn_boot.c, for the BSP
+ * side of this same issue). Harmless no-op on kernels where these
+ * symbols aren't namespaced.
+ */
 MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
-#endif

@@ -94,11 +94,26 @@ static int btwrite_proc_show(struct seq_file *m, void *v)
 
 static int bluesleep_open_proc_btwrite(struct inode *inode, struct file *file)
 {
+    /*
+     * PDE_DATA() was renamed to pde_data() in Linux 5.17 (commit
+     * 359745d78351, "proc: remove PDE_DATA() completely").
+     */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
     return single_open(file, btwrite_proc_show, PDE_DATA(inode));
-
+#else
+    return single_open(file, btwrite_proc_show, pde_data(inode));
+#endif
 }
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 5, 0)
+/*
+ * proc_create() has required a `const struct proc_ops *` instead of
+ * `const struct file_operations *` since Linux 5.6 (commit
+ * d56c0d45f0e2, "proc: decouple proc from VFS with "struct proc_ops"").
+ * The individual callbacks keep the exact same signatures, so this is
+ * a pure field-rename (.open -> .proc_open, etc.); proc_ops also has
+ * no .owner field (module refcounting moved elsewhere).
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 6, 0)
 static const struct file_operations lpm_proc_btwrite_fops =
 {
     .owner = THIS_MODULE,

@@ -88,7 +88,7 @@ struct sprdwl_addr_trans_value {
 struct sprdwl_addr_trans {
 	unsigned int timestamp;
 	unsigned char tlv_num;
-	struct sprdwl_addr_trans_value value[0];
+	struct sprdwl_addr_trans_value value[];
 } __packed;
 
 /* NOTE: MUST not modify, defined by HW */

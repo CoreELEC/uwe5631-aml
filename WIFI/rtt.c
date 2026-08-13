@@ -121,7 +121,7 @@ struct ftm_per_dest_res {
 	/* actual received ftm per burst */
 	u8 actual_ftm_per_burst;
 	u8 reserved0[7];
-	struct sprdwl_responder_ftm_res responder_ftm_res[0];
+	struct sprdwl_responder_ftm_res responder_ftm_res[];
 } __packed;
 
 struct ftm_dest_info {
@@ -145,13 +145,13 @@ struct ftm_session_start {
 	u8 aoa_type;
 	__le16 num_of_dest;
 	u8 reserved[4];
-	struct ftm_dest_info dest_info[0];
+	struct ftm_dest_info dest_info[];
 } __packed;
 
 struct sprdwl_cmd_rtt {
 	u8 sub_cmd;
 	__le16 len;
-	u8 data[0];
+	u8 data[];
 } __packed;
 
 static const struct
@@ -700,7 +700,6 @@ int sprdwl_event_ftm(struct sprdwl_vif *vif, u8 *data, u16 len)
 
 	memcpy(&sub_event, data, sizeof(sub_event));
 	data += sizeof(sub_event);
-	len -= sizeof(sub_event);
 
 	switch (sub_event) {
 	case RTT_SESSION_END:

@@ -22,15 +22,15 @@
 #include "rf.h"
 #include "wcn_integrate.h"
 
-#define SYSTEM_WIFI_CONFIG_FILE "/etc/connectivity_configure.ini"
-#define SYSTEM_WIFI_CALI_FILE "/etc/connectivity_calibration.ini"
-#define VENDOR_WIFI_CONFIG_FILE "/etc/connectivity_configure.ini"
-#define VENDOR_WIFI_CALI_FILE "/etc/connectivity_calibration.ini"
-#define VENDOR_WIFI_CONFIG_AD_FILE "/etc/wcn/connectivity_configure.ini"
-#define SYSTEM_WIFI_CONFIG_AD_FILE "/etc/wcn/connectivity_configure.ini"
-#define VENDOR_WIFI_CALI_AD_FILE "/etc/wcn/connectivity_calibration.ini"
-#define SYSTEM_WIFI_CALI_AD_FILE "/etc/wcn/connectivity_calibration.ini"
-#define WIFI_CALI_DUMP_FILE "/etc/connectivity_calibration_bak.ini"
+#define SYSTEM_WIFI_CONFIG_FILE "/system/etc/connectivity_configure.ini"
+#define SYSTEM_WIFI_CALI_FILE "/system/etc/connectivity_calibration.ini"
+#define VENDOR_WIFI_CONFIG_FILE "/vendor/etc/connectivity_configure.ini"
+#define VENDOR_WIFI_CALI_FILE "/vendor/etc/connectivity_calibration.ini"
+#define VENDOR_WIFI_CONFIG_AD_FILE "/vendor/etc/wcn/connectivity_configure.ini"
+#define SYSTEM_WIFI_CONFIG_AD_FILE "/system/etc/wcn/connectivity_configure.ini"
+#define VENDOR_WIFI_CALI_AD_FILE "/vendor/etc/wcn/connectivity_calibration.ini"
+#define SYSTEM_WIFI_CALI_AD_FILE "/system/etc/wcn/connectivity_calibration.ini"
+#define WIFI_CALI_DUMP_FILE "/mnt/vendor/wcn/connectivity_calibration_bak.ini"
 
 #define CONF_TYPE 1
 #define CALI_TYPE 2
@@ -725,9 +725,7 @@ static void cali_save_file(char *path, struct wifi_cali_t *p)
 	struct file *fp;
 	int i, j;
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 17, 0)
 	set_fs(KERNEL_DS);
-#endif
 
 	fp = filp_open(path, O_RDWR | O_CREAT | O_TRUNC, 0771);
 	if (IS_ERR_OR_NULL(fp)) {

@@ -45,12 +45,12 @@ int bluetooth_set_power(void *data, bool blocked)
     {
         if (is_power_on)
         {
-            //struct HC_BT_HDR *payload = (struct HC_BT_HDR *)vmalloc(sizeof(struct HC_BT_HDR) + 3);
+            struct HC_BT_HDR *payload = (struct HC_BT_HDR *)vmalloc(sizeof(struct HC_BT_HDR) + 3);
 
-            //payload->len = 3;
-            //payload->data[0] = 0;
-            //payload->data[1] = 0;
-            //payload->data[2] = 0;
+            payload->len = 3;
+            payload->data[0] = 0;
+            payload->data[1] = 0;
+            payload->data[2] = 0;
 
             //hci_cmd_send_sync(0xfca1, payload, NULL);
         }
@@ -63,15 +63,15 @@ int bluetooth_set_power(void *data, bool blocked)
     return 0;
 }
 
-//static int bluetooth_set_power_dryrun(void *data, bool blocked)
-//{
-    //pr_err("%s: blocked %d data 0x%p\n", __func__, blocked, data);
-    //return 0;
-//}
+static int bluetooth_set_power_dryrun(void *data, bool blocked)
+{
+    pr_err("%s: blocked %d data 0x%p\n", __func__, blocked, data);
+    return 0;
+}
 
 static struct rfkill_ops rfkill_bluetooth_ops =
 {
-    .set_block = bluetooth_set_power,
+    .set_block = bluetooth_set_power_dryrun,
 };
 
 int rfkill_bluetooth_init(struct platform_device *pdev)
